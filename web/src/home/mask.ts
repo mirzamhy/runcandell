@@ -20,3 +20,7 @@ export const maskSvg = (fill = '#ff2a2a') =>
 
 /** The glowing blue eyes ("welcome" sigil). */
 export const EYES_SIGIL = '<svg viewBox="0 0 120 44" aria-hidden="true"><path d="M4 6C26 6 50 18 54 40 30 38 10 26 4 6Z"/><path d="M116 6C94 6 70 18 66 40 90 38 110 26 116 6Z"/></svg>'
+
+/** Just the two eye holes, same grid as the mask, as separate paths (each eye animates on its own). */
+export const maskEyesSvg = () =>
+  `<svg viewBox="0 0 ${MASK_W} ${MASK_H}" aria-hidden="true"><path d="${toD(EYE_L)}"/><path d="${toD(EYE_R)}"/></svg>`

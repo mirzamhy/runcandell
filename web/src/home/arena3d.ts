@@ -45,6 +45,7 @@ void main(){
   float f = clamp(body * 1.5 + q * 1.15 - .72 - uv.y * .18 - (1. - grow) * .9, 0., 1.);
   vec3 c = mix(vec3(.13, .04, .38), vec3(.52, .18, 1.), smoothstep(.05, .5, f));
   c = mix(c, vec3(.93, .78, 1.), smoothstep(.68, 1., f));
+  f *= grow; // grow = 0: no fire at all, not even the brightest noise peaks
   f *= smoothstep(.0, .28, uv.y) * smoothstep(1., .66, uv.y); // soft edges, no hard cut at the plane border
   gl_FragColor = vec4(c * f * 1.5, f);
 }`

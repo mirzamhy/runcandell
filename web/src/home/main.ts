@@ -1,7 +1,7 @@
 /** Arena home: guest login, then the dashboard (duel, chart, leaderboard). */
 import { ApiError, api, duelApi, statsApi, type DuelListItem, type Stats, type User } from '../api'
 import type { Arena3D } from './arena3d'
-import { EYES_SIGIL, maskSvg } from './mask'
+import { EYES_SIGIL, maskEyesSvg, maskSvg } from './mask'
 import './home.css'
 
 // old share links pointed at "/?duel=CODE": the duel lives on the chart page now
@@ -15,7 +15,8 @@ const tone = (r: number) => (r > 0 ? 'pos' : r < 0 ? 'neg' : '')
 
 for (const el of document.querySelectorAll('.logo')) el.innerHTML = maskSvg()
 for (const el of document.querySelectorAll('.mask-fallback')) el.innerHTML = maskSvg()
-for (const el of document.querySelectorAll('.sigil, .avatar, .intro-eyes')) el.innerHTML = EYES_SIGIL
+for (const el of document.querySelectorAll('.avatar')) el.innerHTML = EYES_SIGIL
+$('intro-eyes').innerHTML = maskEyesSvg()
 
 // three.js is the bulk of this page: load it after the UI is up
 let slot: HTMLElement | null = null
@@ -87,13 +88,16 @@ async function playIntro() {
   if (!skipped) welcome.classList.add('on') // flickers on, then glitches
   await step(2600)
   if (!skipped) {
-    eyes.classList.add('out')
     welcome.classList.add('out')
-    // the 3D mask comes out of the dark, still, in purple fire
+    // the 3D mask comes out of the dark around the eyes, still, in purple fire
     const a = await Promise.race([arenaReady, finished.then(() => null)])
     a?.setReveal(1, 2200)
-  }
-  await step(3000)
+    await step(400)
+    eyes.classList.add('heat') // blue glow turns into the mask's red eye glow
+    await step(700) // the 3D eyes are lit by now: hand over
+    eyes.classList.add('out')
+    await step(1900)
+  } else await step(0)
 
   // landing: lift the veil, mask glides into the hero, then starts to breathe
   try {

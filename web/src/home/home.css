@@ -43,14 +43,18 @@ body.intro .veil { opacity: 1; transition: none; }
 .view-login { transition: opacity 1.2s ease 0.2s; }
 body.intro .view-login { opacity: 0; pointer-events: none; }
 .intro { position: fixed; inset: 0; z-index: 4; display: grid; place-items: center; pointer-events: none; }
-.intro-eyes { position: absolute; left: 50%; top: 40%; width: min(52vw, 280px); aspect-ratio: 120 / 44; transform: translate(-50%, -50%); opacity: 0; }
+.intro { --slot-h: min(62vh, 520px, 100vw); }
+/* same box and scale as the 3D mask (Arena3D draws it at 0.86 of its slot), so the eyes land on the mask's eyes */
+.intro-eyes { position: absolute; inset: 0; transform: scale(0.86); opacity: 0; }
 .intro-eyes.on { opacity: 1; }
-.intro-eyes svg { width: 100%; height: 100%; overflow: visible; stroke: none; fill: #eef6ff; filter: drop-shadow(0 0 6px #6f9bff) drop-shadow(0 0 22px var(--sapphire)) drop-shadow(0 0 60px rgba(64, 95, 250, 0.7)); }
+.intro-eyes svg { width: 100%; height: 100%; overflow: visible; stroke: none; fill: #eef6ff; filter: drop-shadow(0 0 6px #6f9bff) drop-shadow(0 0 22px var(--sapphire)) drop-shadow(0 0 60px rgba(64, 95, 250, 0.7)); transition: filter 0.7s ease; }
+/* as the mask lights up, the blue glow turns into the mask's red eye glow */
+.intro-eyes.heat svg { filter: drop-shadow(0 0 6px #ff6b5e) drop-shadow(0 0 22px #ff2a2a) drop-shadow(0 0 60px rgba(255, 42, 42, 0.6)); }
 /* each eye: a dot of light, stretches into a slit, then opens; later blinks */
 .intro-eyes path { transform-box: fill-box; transform-origin: 50% 55%; transform: scale(0.015, 0.03); opacity: 0; }
 .intro-eyes.on path { animation: eye-open 2.4s cubic-bezier(0.6, 0, 0.2, 1) forwards, eye-blink 1.8s ease-in-out 2.7s; }
 .intro-eyes.on path + path { animation-delay: 0.08s, 2.7s; }
-.intro-welcome { position: absolute; left: 50%; top: calc(40% + min(13vw, 72px)); transform: translateX(-50%); padding-left: 0.6em; white-space: nowrap;
+.intro-welcome { position: absolute; left: 50%; top: calc(50% + var(--slot-h) * 0.13); transform: translateX(-50%); padding-left: 0.6em; white-space: nowrap;
   font: 600 clamp(14px, 2.4vw, 20px) 'Unbounded', sans-serif; letter-spacing: 0.6em; color: #b9c6ff; text-shadow: 0 0 22px rgba(64, 95, 250, 0.9); opacity: 0; }
 .intro-welcome.on { opacity: 1; }
 .glitch { position: relative; display: inline-block; }
@@ -61,7 +65,7 @@ body.intro .view-login { opacity: 0; pointer-events: none; }
 .intro-welcome.on .glitch::before { animation: slice-a 2.4s steps(1) 0.4s infinite; }
 .intro-welcome.on .glitch::after { animation: slice-b 2.4s steps(1) 0.4s infinite; }
 .intro-eyes.out, .intro-welcome.out { animation: fade-out 0.9s ease-in forwards; }
-.intro-slot { position: absolute; left: 50%; top: 50%; height: min(62vh, 520px, 100vw); aspect-ratio: 200 / 262; transform: translate(-50%, -50%); }
+.intro-slot { position: absolute; left: 50%; top: 50%; height: var(--slot-h); aspect-ratio: 200 / 262; transform: translate(-50%, -50%); }
 .intro-skip { position: absolute; right: 20px; bottom: 20px; pointer-events: auto; padding: 8px 14px; border-radius: 999px; font-size: 13px; color: var(--muted); border: 1px solid rgba(217, 252, 237, 0.15); }
 .intro-skip:hover { color: var(--text); }
 @keyframes eye-open {
