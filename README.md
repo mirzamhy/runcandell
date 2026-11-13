@@ -19,6 +19,14 @@ Indikator (F2), lewat tombol **Indikator**:
 - Nilai tampil di chip kiri atas (ikut crosshair); ikon gerigi untuk ubah periode dan warna; tersimpan di browser.
 - Rumus mengikuti default TradingView (RSI/ATR pakai Wilder, EMA diawali SMA); sudah dicocokkan dengan hitungan pandas.
 
+Bar replay + paper trading (F3), lewat tombol **Replay**:
+- Klik candle untuk titik mulai (atau **Acak**). Candle sesudahnya disembunyikan; candle timeframe besar yang sedang berjalan dibangun dari M1 sampai titik replay, jadi high/low masa depan tidak bocor.
+- Kontrol: putar/jeda (Spasi), maju 1 candle (Shift+→), kecepatan 1–20 candle/detik, ulang dari awal, sembunyikan tanggal (jam tetap tampil).
+- Order market, limit, stop dengan SL/TP; risiko per trade dan R:R tampil sebelum order. Garis SL/TP/order pending bisa digeser di chart.
+- Akun $10.000, leverage 1:100, 1 lot = 100 oz, spread dari data. Buy masuk di Ask keluar di Bid; sell sebaliknya. Kalau SL dan TP kena di candle yang sama, dianggap SL.
+- Panel: saldo, equity, posisi, order, riwayat, statistik (win rate, profit factor, max drawdown), kurva equity. Sesi tersimpan dan bisa dilanjutkan.
+- Tes engine: `npm test` di folder `web`.
+
 Produksi: set `VITE_DATA_URL` ke URL folder data di CDN (default `/data`).
 
 ## Data (F0)

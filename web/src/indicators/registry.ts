@@ -24,6 +24,8 @@ export interface Ctx {
   day: Float64Array // trading-day id
   intraday: boolean // below D1
   tfSec: number
+  /** same bar window as last time, only the tail changed (replay step): series may update just the tail */
+  incremental: boolean
 }
 
 export interface ParamDef {
@@ -93,6 +95,26 @@ function lineData(times: Time[], arr: ArrayLike<number>): LineData<Time>[] {
   return out
 }
 
+interface SyncState {
+  len: number
+  first: Time | null
+}
+
+/**
+ * setData is O(n) and slow with many series; on a replay step only the last points change,
+ * so update the tail instead. Indicators here are causal: older values never change.
+ */
+function syncSeries(s: ISeriesApi<SeriesType>, pts: { time: Time }[], st: SyncState, incremental: boolean) {
+  const n = pts.length
+  if (incremental && n && st.len && pts[0].time === st.first && n >= st.len && n - st.len <= 500) {
+    for (let i = st.len - 1; i < n; i++) s.update(pts[i] as never)
+  } else {
+    s.setData(pts as never)
+  }
+  st.len = n
+  st.first = pts[0]?.time ?? null
+}
+
 const fmt2 = (v: number) => (Number.isFinite(v) ? v.toFixed(2) : '–')
 const fmtInt = (v: number) => (Number.isFinite(v) ? Math.round(v).toLocaleString('id-ID') : '–')
 
@@ -119,6 +141,7 @@ class Lines implements Instance {
   private readonly specs: { idx: number; color: string }[] = []
   private host: ISeriesApi<SeriesType> | null = null
   private hostColor = ''
+  private readonly hostSync: SyncState = { len: 0, first: null }
   data: Record<string, ArrayLike<number>> = {}
 
   constructor(
@@ -174,8 +197,13 @@ class Lines implements Instance {
     this.plot.set(idx, data)
   }
 
-  setHost(data: ArrayLike<number>, times: Time[]) {
-    this.host?.setData(lineData(times, data))
+  setHost(data: ArrayLike<number>, ctx: Ctx) {
+    if (this.host) syncSeries(this.host, lineData(ctx.times, data), this.hostSync, ctx.incremental)
+  }
+
+  /** For hosts that need custom points (MACD histogram colors). */
+  setHostPoints(pts: { time: Time }[], ctx: Ctx) {
+    if (this.host) syncSeries(this.host, pts, this.hostSync, ctx.incremental)
   }
 
   guide(price: number): IPriceLine | null {
@@ -511,7 +539,7 @@ function oscillator(
       for (const g of opts.guides ?? []) inst.guide(g)
       inst.update = (ctx) => {
         inst.data = compute(ctx, cfg.params)
-        inst.setHost(inst.data[first.key], ctx.times)
+        inst.setHost(inst.data[first.key], ctx)
         rest.forEach((s, j) => inst.setLine(extra[j], inst.data[s.key]))
       }
       return inst
@@ -604,7 +632,7 @@ const macdDef: IndicatorDef = {
       { key: 'line', label: 'MACD', color: 'macd' },
       { key: 'signal', label: 'S', color: 'signal' },
     ])
-    const host = inst.hostHistogram('up')
+    inst.hostHistogram('up')
     const line = inst.line('macd')
     const sig = inst.line('signal')
     inst.update = (ctx) => {
@@ -615,7 +643,7 @@ const macdDef: IndicatorDef = {
         const v = r.hist[i]
         if (Number.isFinite(v)) hist.push({ time: ctx.times[i], value: v, color: alpha(v >= 0 ? cfg.colors.up : cfg.colors.down, 0.6) })
       }
-      host.setData(hist)
+      inst.setHostPoints(hist, ctx)
       inst.setLine(line, r.line)
       inst.setLine(sig, r.signal)
     }

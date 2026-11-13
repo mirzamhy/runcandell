@@ -18,6 +18,10 @@
         </button>
         <div class="ind-menu" id="ind-menu" hidden></div>
       </div>
+      <button type="button" id="replay-btn" aria-pressed="false" title="Bar replay + paper trading">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 4v12M8 5l9 5-9 5z" /></svg>
+        Replay
+      </button>
       <div class="spacer"></div>
       <form class="goto" id="goto">
         <input type="datetime-local" id="goto-input" aria-label="Lompat ke tanggal" />
@@ -60,8 +64,25 @@
         </div>
         <div class="chart" id="chart"></div>
         <div class="pane-layer" id="pane-chips"></div>
+        <div class="pick-line" id="pick-line" hidden></div>
+        <div class="pick-bar" id="pick-bar" hidden>
+          <span>Klik candle untuk titik mulai replay</span>
+          <button type="button" data-p="random">Acak</button>
+          <button type="button" data-p="cancel">Batal</button>
+        </div>
+        <div class="replay-bar" id="replay-bar" role="toolbar" aria-label="Kontrol replay" hidden>
+          <button type="button" data-r="restart" title="Ulang dari titik awal" aria-label="Ulang dari titik awal">⏮</button>
+          <button type="button" data-r="play" class="play">▶</button>
+          <button type="button" data-r="step" title="Maju 1 candle (Shift+→)" aria-label="Maju 1 candle">⏭</button>
+          <select data-r="speed" aria-label="Kecepatan"></select>
+          <span class="clock" data-r="clock"></span>
+          <label class="hide-date" title="Sembunyikan tanggal"><input type="checkbox" data-r="hide" /> <span>Sembunyikan </span>tanggal</label>
+          <span class="spacer"></span>
+          <button type="button" data-r="exit">Keluar replay</button>
+        </div>
         <div class="overlay" id="overlay" hidden></div>
       </section>
+      <aside class="trade" id="trade" aria-label="Paper trading" hidden></aside>
     </main>
 
     <footer class="statusbar" id="status"></footer>

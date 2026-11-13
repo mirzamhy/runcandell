@@ -507,3 +507,375 @@ button.primary {
 button.primary:hover {
   background: color-mix(in srgb, var(--accent) 85%, white);
 }
+
+/* ---------- replay + paper trading ---------- */
+
+#replay-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#replay-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+}
+
+#replay-btn[aria-pressed='true'] {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+body.replay .workspace {
+  grid-template-columns: 44px minmax(0, 1fr) 320px;
+}
+
+.chart-wrap.picking {
+  cursor: crosshair;
+}
+
+.pick-line {
+  position: absolute;
+  top: 0;
+  bottom: 28px;
+  width: 0;
+  border-left: 2px dashed var(--accent);
+  z-index: 4;
+  pointer-events: none;
+}
+
+.pick-line[hidden],
+.pick-bar[hidden],
+.replay-bar[hidden],
+.trade[hidden] {
+  display: none;
+}
+
+.pick-bar {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 24px);
+  padding: 6px 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  white-space: nowrap;
+}
+
+/* replay controls: a docked strip under the chart, so they never cover candles */
+body.replay .chart,
+body.replay .pane-layer {
+  bottom: 44px;
+}
+
+.replay-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 6;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  overflow-x: auto;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.replay-bar .play {
+  min-width: 40px;
+  color: var(--accent);
+}
+
+.replay-bar .clock {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  padding: 0 4px;
+}
+
+.replay-bar .hide-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.replay-bar .hide-date input {
+  min-height: 0;
+}
+
+.trade {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px;
+  border-left: 1px solid var(--border);
+  background: var(--panel);
+  font-variant-numeric: tabular-nums;
+}
+
+.trade .k {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.trade .up {
+  color: var(--up);
+}
+
+.trade .down {
+  color: var(--down);
+}
+
+.acct,
+.stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 12px;
+}
+
+.stats {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.ticket {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.ticket .row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.ticket label {
+  display: grid;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.ticket input,
+.ticket select {
+  width: 100%;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.ticket .price-row[hidden] {
+  display: none;
+}
+
+.risk {
+  margin: 0;
+  min-height: 1.4em;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.sides {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.sides button {
+  display: grid;
+  gap: 1px;
+  padding: 6px;
+  border: 0;
+  color: #fff;
+  font-weight: 600;
+}
+
+.sides button span {
+  font-size: 11px;
+  letter-spacing: 0.05em;
+}
+
+.sides .sell {
+  background: #c43d3a;
+}
+
+.sides .buy {
+  background: #2f6fe0;
+}
+
+.sides .sell:hover {
+  background: #d24a47;
+}
+
+.sides .buy:hover {
+  background: #3d7cf0;
+}
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tabs button {
+  border: 0;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+.tabs button[aria-selected='true'] {
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.tab-body {
+  min-height: 60px;
+}
+
+.tab-body table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.tab-body th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--muted);
+  padding: 3px 4px;
+}
+
+.tab-body td {
+  padding: 3px 4px;
+  border-top: 1px solid var(--border);
+}
+
+.tab-body td.buy {
+  color: #4c8dff;
+}
+
+.tab-body td.sell {
+  color: var(--down);
+}
+
+.tab-body input {
+  width: 72px;
+  min-height: 24px;
+  padding: 1px 4px;
+  font-size: 12px;
+}
+
+.tab-body .x {
+  min-height: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+}
+
+.tab-body .x:hover {
+  color: var(--down);
+}
+
+.tab-body .link {
+  margin-top: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 2px 0;
+  min-height: 0;
+}
+
+.tab-body .link:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.empty {
+  margin: 8px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.perf canvas {
+  display: block;
+  width: 100%;
+  height: 64px;
+  margin-top: 8px;
+}
+
+.toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 40px;
+  z-index: 50;
+  display: grid;
+  gap: 6px;
+  max-width: min(360px, calc(100vw - 32px));
+}
+
+.toast {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 3px solid #4c8dff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  font-size: 13px;
+}
+
+.toast.good {
+  border-left-color: var(--up);
+}
+
+.toast.bad {
+  border-left-color: var(--down);
+}
+
+button:disabled,
+input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (max-width: 900px) {
+  body.replay .workspace {
+    grid-template-columns: 40px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+  body.replay .trade {
+    grid-column: 1 / -1;
+    max-height: 42vh;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
+  .replay-bar .hide-date span {
+    display: none;
+  }
+}

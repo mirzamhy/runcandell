@@ -4,6 +4,7 @@ import {
   CrosshairMode,
   HistogramSeries,
   LineStyle,
+  TickMarkType,
   createChart,
   type CandlestickData,
   type HistogramData,
@@ -15,13 +16,24 @@ import {
 import './style.css'
 import { SeriesStore, TIMEFRAMES, loadManifest, type Bar, type Manifest, type TF } from './data'
 import { DrawingLayer, type Drawing, type Tool } from './drawings'
+import { DEFAULT_CONFIG } from './engine/account'
 import { IndicatorManager } from './indicators/manager'
 import type { IndicatorConfig } from './indicators/registry'
+import { Replay, floorIndex, type ReplaySession } from './replay'
 import { ZONES, d1DisplayTime, formatWall, makeShifter, parseZoned, toInputValue } from './time'
+import { TradeUI, toast } from './trade'
 
 // ---------- persisted settings ----------
 
-const KEY = { tf: 'rc.v1.tf', zone: 'rc.v1.zone', drawings: 'rc.v1.drawings', indicators: 'rc.v1.indicators', chipsCollapsed: 'rc.v1.chipsCollapsed' }
+const KEY = {
+  tf: 'rc.v1.tf',
+  zone: 'rc.v1.zone',
+  drawings: 'rc.v1.drawings',
+  indicators: 'rc.v1.indicators',
+  chipsCollapsed: 'rc.v1.chipsCollapsed',
+  replay: 'rc.v1.replay',
+  speed: 'rc.v1.replaySpeed',
+}
 
 function load<T>(key: string, fallback: T): T {
   try {
@@ -34,7 +46,8 @@ function load<T>(key: string, fallback: T): T {
 
 function save(key: string, value: unknown) {
   try {
-    localStorage.setItem(key, JSON.stringify(value))
+    if (value === null) localStorage.removeItem(key)
+    else localStorage.setItem(key, JSON.stringify(value))
   } catch {
     /* storage unavailable: settings just won't persist */
   }
@@ -44,6 +57,7 @@ function save(key: string, value: unknown) {
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T
 const chartEl = $('chart')
+const chartWrap = chartEl.parentElement as HTMLElement
 const legendEl = $('legend')
 const overlayEl = $('overlay')
 const statusEl = $('status')
@@ -59,11 +73,41 @@ const tfsEl = $('tfs')
 const zoneEl = $<HTMLSelectElement>('zone')
 const gotoForm = $<HTMLFormElement>('goto')
 const gotoInput = $<HTMLInputElement>('goto-input')
+const replayBtn = $<HTMLButtonElement>('replay-btn')
+const replayBar = $('replay-bar')
+const pickBar = $('pick-bar')
+const pickLine = $('pick-line')
+const tradeEl = $('trade')
 
 const css = getComputedStyle(document.documentElement)
 const color = (name: string) => css.getPropertyValue(name).trim()
 
+// ---------- state ----------
+
+let manifest: Manifest
+let store: SeriesStore
+let tf: TF = load<TF>(KEY.tf, 'M15')
+if (!TIMEFRAMES.includes(tf)) tf = 'M15'
+let zone = load<string>(KEY.zone, 'Asia/Jakarta')
+if (!ZONES.some((z) => z.id === zone)) zone = 'UTC'
+let shift = makeShifter(zone)
+let busy = false
+
+let replay: Replay | null = null
+let picking = false
+let playing = false
+let speed = load<number>(KEY.speed, 5)
+/** bars currently on the chart (all loaded bars, or the replay-visible part) and their chart times */
+let shown: Bar[] = []
+let shownTimes: Time[] = []
+
+const hideDate = () => !!replay?.hideDate
+const displayTime = (t: number) => (tf === 'D1' ? d1DisplayTime(t) : shift(t))
+
 // ---------- chart ----------
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const pad = (n: number) => String(n).padStart(2, '0')
 
 const chart = createChart(chartEl, {
   autoSize: true,
@@ -81,7 +125,28 @@ const chart = createChart(chartEl, {
   },
   crosshair: { mode: CrosshairMode.Normal },
   rightPriceScale: { borderColor: color('--border') },
-  timeScale: { borderColor: color('--border'), timeVisible: true, secondsVisible: false, rightOffset: 10 },
+  timeScale: {
+    borderColor: color('--border'),
+    timeVisible: true,
+    secondsVisible: false,
+    rightOffset: 10,
+    // chart times are wall-clock seconds "as if UTC"; dates can be hidden for replay practice
+    tickMarkFormatter: (time: Time, type: TickMarkType) => {
+      const d = new Date((time as number) * 1000)
+      if (type === TickMarkType.Time || type === TickMarkType.TimeWithSeconds) return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`
+      if (hideDate()) return ''
+      if (type === TickMarkType.Year) return String(d.getUTCFullYear())
+      if (type === TickMarkType.Month) return MONTHS[d.getUTCMonth()]
+      return String(d.getUTCDate())
+    },
+  },
+  localization: {
+    timeFormatter: (time: Time) => {
+      const wall = time as number
+      if (hideDate()) return tf === 'D1' ? '' : formatWall(wall).slice(11)
+      return formatWall(wall, tf !== 'D1')
+    },
+  },
 })
 
 const candles = chart.addSeries(CandlestickSeries, {
@@ -123,19 +188,6 @@ const volume = chart.addSeries(
 chart.panes()[0].setStretchFactor(4)
 chart.panes()[1].setStretchFactor(1)
 
-// ---------- state ----------
-
-let manifest: Manifest
-let store: SeriesStore
-let tf: TF = load<TF>(KEY.tf, 'M15')
-if (!TIMEFRAMES.includes(tf)) tf = 'M15'
-let zone = load<string>(KEY.zone, 'Asia/Jakarta')
-if (!ZONES.some((z) => z.id === zone)) zone = 'UTC'
-let shift = makeShifter(zone)
-let busy = false
-
-const displayTime = (t: number) => (tf === 'D1' ? d1DisplayTime(t) : shift(t))
-
 const drawings = new DrawingLayer(
   {
     toLogical: (t) => (store ? store.indexOfTime(t) : 0),
@@ -152,10 +204,43 @@ indicators.onSave = (list) => save(KEY.indicators, list)
 indicators.collapsed = load<boolean>(KEY.chipsCollapsed, false)
 indicators.onCollapse = (c) => save(KEY.chipsCollapsed, c)
 
+const trade = new TradeUI({
+  root: tradeEl,
+  chartHost: chartWrap,
+  chart,
+  candles,
+  chartTimeOf: (t) => {
+    const i = floorIndex(shown, t)
+    return i < 0 ? null : (shownTimes[i] ?? null)
+  },
+  onChange: () => {
+    updateQuoteLines()
+    saveSession()
+  },
+})
+
 // ---------- rendering ----------
 
-function render() {
-  const bars = store.bars
+/** Identity of the bar window on the chart: incremental updates are only valid within one. */
+let renderKey = ''
+let renderedLen = 0
+let renderedFirst: Time | null = null
+let lastIndicatorRun = 0
+let indicatorTimer = 0
+
+let indicatorsIncremental = false
+
+function runIndicators() {
+  clearTimeout(indicatorTimer)
+  indicatorTimer = 0
+  lastIndicatorRun = performance.now()
+  indicators.update(shown, shownTimes, store.tfSec, indicatorsIncremental)
+  indicatorsIncremental = true
+}
+
+function render(opts: { incremental?: boolean } = {}) {
+  shown = replay ? replay.visible(store) : store.bars
+  const bars = shown
   const c: CandlestickData<Time>[] = new Array(bars.length)
   const v: HistogramData<Time>[] = new Array(bars.length)
   const upVol = 'rgba(38,166,154,0.45)'
@@ -170,51 +255,71 @@ function render() {
     c[i] = { time, open: b.open, high: b.high, low: b.low, close: b.close }
     v[i] = { time, value: b.volume, color: b.close >= b.open ? upVol : downVol }
   }
-  candles.setData(c)
-  volume.setData(v)
-  indicators.update(bars, c.map((x) => x.time), store.tfSec)
+  shownTimes = c.map((x) => x.time)
+
+  const key = `${tf}|${zone}`
+  const n = c.length
+  const canAppend =
+    opts.incremental && key === renderKey && renderedLen > 0 && n >= renderedLen && n - renderedLen <= 500 && c[0]?.time === renderedFirst
+  if (canAppend) {
+    // replay step: only the last candle changed and maybe a few were added
+    for (let i = renderedLen - 1; i < n; i++) {
+      candles.update(c[i])
+      volume.update(v[i])
+    }
+  } else {
+    candles.setData(c)
+    volume.setData(v)
+  }
+  renderKey = key
+  renderedLen = n
+  renderedFirst = c[0]?.time ?? null
+
+  // indicators are the expensive part: tail-only series updates on replay steps,
+  // and throttled while replay is playing
+  if (!canAppend) indicatorsIncremental = false
+  if (opts.incremental && playing && performance.now() - lastIndicatorRun < 150) {
+    if (!indicatorTimer) indicatorTimer = window.setTimeout(runIndicators, 150)
+  } else runIndicators()
+
   updateQuoteLines()
   drawings.refresh()
   updateLegend()
   updateStatus()
+  if (replay) {
+    trade.refresh()
+    updateClock()
+  }
 }
 
 const fmt = (n: number) => n.toFixed(2)
 
-/** Bid/Ask lines only make sense at the newest bar; hide them while viewing an older window. */
+/** Bid/Ask lines at the newest visible bar (the replay cursor in replay mode). */
 function updateQuoteLines() {
-  const last = store.bars[store.bars.length - 1]
-  const show = store.atLatest && !!last
+  const last = shown[shown.length - 1]
+  const show = !!last && (replay ? true : store.atLatest)
   const bidColor = last && last.close >= last.open ? color('--up') : color('--down')
-  bidLine.applyOptions({
-    price: last?.close ?? 0,
-    color: bidColor,
-    lineVisible: show,
-    axisLabelVisible: show,
-  })
-  askLine.applyOptions({
-    price: last ? last.close + last.spread : 0,
-    lineVisible: show,
-    axisLabelVisible: show,
-  })
+  bidLine.applyOptions({ price: last?.close ?? 0, color: bidColor, lineVisible: show, axisLabelVisible: show })
+  askLine.applyOptions({ price: last ? last.close + last.spread : 0, lineVisible: show, axisLabelVisible: show })
 }
 
 function updateLegend(param?: MouseEventParams<Time>) {
-  if (!store?.bars.length) {
+  if (!shown.length) {
     legendEl.textContent = ''
     return
   }
-  let i = store.bars.length - 1
-  if (param?.logical !== undefined && param.point) i = Math.round(param.logical)
-  const b: Bar | undefined = store.bars[i]
+  let i = shown.length - 1
+  if (param?.logical !== undefined && param.point) i = Math.min(Math.round(param.logical), shown.length - 1)
+  const b: Bar | undefined = shown[i]
   if (!b) return
-  const prev = store.bars[i - 1]
+  const prev = shown[i - 1]
   const chg = prev ? b.close - prev.close : b.close - b.open
   const pct = (chg / (prev ? prev.close : b.open)) * 100
   const cls = chg >= 0 ? 'up' : 'down'
-  const when = formatWall(displayTime(b.time), tf !== 'D1')
+  const wall = displayTime(b.time)
+  const when = hideDate() ? (tf === 'D1' ? '' : formatWall(wall).slice(11)) : formatWall(wall, tf !== 'D1')
   legendEl.innerHTML = [
-    `<span><b>${manifest.symbol}</b> · ${tf} · ${when}</span>`,
+    `<span><b>${manifest.symbol}</b> · ${tf}${when ? ` · ${when}` : ''}</span>`,
     `<span><span class="k">O</span>${fmt(b.open)}</span>`,
     `<span><span class="k">H</span>${fmt(b.high)}</span>`,
     `<span><span class="k">L</span>${fmt(b.low)}</span>`,
@@ -227,11 +332,17 @@ function updateLegend(param?: MouseEventParams<Time>) {
 }
 
 function updateStatus() {
+  const zoneLabel = ZONES.find((z) => z.id === zone)?.label ?? zone
+  if (replay) {
+    statusInfo.textContent =
+      `Replay ${tf} · ${hideDate() ? 'tanggal disembunyikan' : `mulai ${formatWall(shift(replay.startTime))}`} · ` +
+      `harga candle = Bid, Ask = Bid + spread`
+    return
+  }
   const m1 = manifest.timeframes.M1
   const total = m1.reduce((s, c) => s + c.bars, 0)
   const from = formatWall(shift(m1[0].from), false)
   const to = formatWall(shift(m1[m1.length - 1].to), false)
-  const zoneLabel = ZONES.find((z) => z.id === zone)?.label ?? zone
   statusInfo.textContent =
     `Data ${from} → ${to} · ${total.toLocaleString('id-ID')} candle M1 · ` +
     `dimuat ${store.bars.length.toLocaleString('id-ID')} candle ${tf} · zona ${tf === 'D1' ? 'hari trading NY 17:00' : zoneLabel} · ` +
@@ -270,8 +381,13 @@ function setRange(center: number, span: number) {
 }
 
 function showLatest(span: number) {
-  const n = store.bars.length
+  const n = shown.length
   chart.timeScale().setVisibleLogicalRange({ from: n - span * 0.9, to: n + span * 0.1 })
+}
+
+function currentSpan() {
+  const r = chart.timeScale().getVisibleLogicalRange()
+  return r ? Math.max(30, r.to - r.from) : 160
 }
 
 async function switchTF(next: TF) {
@@ -282,11 +398,11 @@ async function switchTF(next: TF) {
   if (store && r) {
     centerT = store.timeOfIndex((r.from + r.to) / 2)
     span = Math.max(30, r.to - r.from)
-    followLatest = store.atLatest && r.to >= store.bars.length - 2
+    followLatest = replay ? true : store.atLatest && r.to >= store.bars.length - 2
   }
   await withBusy(async () => {
     const s = new SeriesStore(manifest, next)
-    await s.loadAround(followLatest ? null : centerT)
+    await s.loadAround(replay ? replay.cursorTime : followLatest ? null : centerT)
     store = s
     tf = next
     save(KEY.tf, tf)
@@ -298,8 +414,7 @@ async function switchTF(next: TF) {
 }
 
 async function goTo(t: number) {
-  const r = chart.timeScale().getVisibleLogicalRange()
-  const span = r ? Math.max(30, r.to - r.from) : 160
+  const span = currentSpan()
   await withBusy(async () => {
     await store.loadAround(t)
     render()
@@ -311,10 +426,9 @@ async function goTo(t: number) {
 }
 
 async function goLatest() {
-  const r = chart.timeScale().getVisibleLogicalRange()
-  const span = r ? Math.max(30, r.to - r.from) : 160
+  const span = currentSpan()
   await withBusy(async () => {
-    if (!store.atLatest) {
+    if (!replay && !store.atLatest) {
       await store.loadAround(null)
       render()
     }
@@ -333,7 +447,7 @@ function onRangeChange(r: LogicalRange | null) {
       render()
       chart.timeScale().setVisibleLogicalRange({ from: cur.from + added, to: cur.to + added })
     })
-  } else if (r.to > n - 200 && store.canRight) {
+  } else if (!replay && r.to > n - 200 && store.canRight) {
     void withBusy(async () => {
       const cur = chart.timeScale().getVisibleLogicalRange() ?? r
       await store.extendRight()
@@ -341,6 +455,235 @@ function onRangeChange(r: LogicalRange | null) {
       chart.timeScale().setVisibleLogicalRange(cur)
     })
   }
+}
+
+// ---------- replay ----------
+
+let lastSave = 0
+let saveTimer = 0
+
+/** Save at most once a second, with a trailing save so the last step is never lost. */
+function saveSession(force = false) {
+  if (!replay) return
+  const now = performance.now()
+  if (!force && now - lastSave < 1000) {
+    if (!saveTimer) saveTimer = window.setTimeout(() => saveSession(true), 1000)
+    return
+  }
+  clearTimeout(saveTimer)
+  saveTimer = 0
+  lastSave = now
+  save(KEY.replay, replay.session())
+}
+
+window.addEventListener('pagehide', () => saveSession(true))
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') saveSession(true)
+})
+
+function updateClock() {
+  const clock = replayBar.querySelector<HTMLElement>('[data-r="clock"]')!
+  if (!replay) return
+  const wall = shift(replay.cursorTime)
+  clock.textContent = hideDate() ? formatWall(wall).slice(11) : formatWall(wall)
+}
+
+function setReplayUI(on: boolean) {
+  document.body.classList.toggle('replay', on)
+  replayBar.hidden = !on
+  tradeEl.hidden = !on
+  replayBtn.setAttribute('aria-pressed', String(on))
+  for (const el of [gotoInput, gotoForm.querySelector('button')!, $('latest')]) (el as HTMLButtonElement).disabled = on
+  const hide = replayBar.querySelector<HTMLInputElement>('[data-r="hide"]')!
+  hide.checked = hideDate()
+  syncPlayButton()
+}
+
+function syncPlayButton() {
+  const b = replayBar.querySelector<HTMLButtonElement>('[data-r="play"]')!
+  b.textContent = playing ? '⏸' : '▶'
+  b.setAttribute('aria-label', playing ? 'Jeda' : 'Putar')
+  b.title = playing ? 'Jeda (Spasi)' : 'Putar (Spasi)'
+}
+
+function setPicking(on: boolean) {
+  picking = on
+  pickBar.hidden = !on
+  pickLine.hidden = true
+  chartWrap.classList.toggle('picking', on)
+}
+
+function randomStart(): number {
+  const m1 = manifest.timeframes.M1
+  const from = m1[0].from + 7 * 86400 // leave history for indicators
+  const to = m1[m1.length - 1].to - 2 * 86400 // leave something to replay
+  return Math.floor(from + Math.random() * Math.max(0, to - from))
+}
+
+async function startReplay(t: number, session?: ReplaySession) {
+  stopPlay()
+  setPicking(false)
+  const r = new Replay(manifest, { ...DEFAULT_CONFIG })
+  const span = currentSpan()
+  await withBusy(async () => {
+    if (session) await r.resume(session)
+    else await r.start(t)
+    await store.loadAround(r.cursorTime)
+    replay = r
+    trade.attach(r.account)
+    setReplayUI(true)
+    render()
+    showLatest(Math.min(span, 200))
+    saveSession(true)
+  })
+}
+
+async function exitReplay() {
+  stopPlay()
+  saveSession(true)
+  trade.detach()
+  replay = null
+  setReplayUI(false)
+  await withBusy(async () => {
+    await store.loadAround(null)
+    render()
+    showLatest(currentSpan())
+  })
+}
+
+async function stepOnce(): Promise<boolean> {
+  const r = replay
+  if (!r) return false
+  let moved = false
+  await withBusy(async () => {
+    moved = await r.step(store)
+    if (moved) {
+      render({ incremental: true })
+      keepCursorInView()
+      saveSession()
+    }
+  })
+  if (!moved) toast('Data habis, replay selesai.')
+  return moved
+}
+
+/** Scroll along when the newest candle reaches the right edge (like a live chart). */
+function keepCursorInView() {
+  const r = chart.timeScale().getVisibleLogicalRange()
+  if (!r) return
+  const n = shown.length
+  if (n - 1 > r.to - 2 && n - 1 < r.to + 20) {
+    const span = r.to - r.from
+    chart.timeScale().setVisibleLogicalRange({ from: n - span * 0.85, to: n + span * 0.15 })
+  }
+}
+
+let playTimer = 0
+
+function stopPlay() {
+  playing = false
+  clearTimeout(playTimer)
+  if (indicatorTimer) runIndicators()
+  syncPlayButton()
+}
+
+function play() {
+  if (!replay) return
+  playing = true
+  syncPlayButton()
+  const tick = async () => {
+    if (!playing) return
+    const t0 = performance.now()
+    const ok = await stepOnce()
+    if (!ok) return stopPlay()
+    playTimer = window.setTimeout(tick, Math.max(0, 1000 / speed - (performance.now() - t0)))
+  }
+  void tick()
+}
+
+function buildReplayControls() {
+  replayBtn.addEventListener('click', () => {
+    if (replay) return void exitReplay()
+    if (picking) return setPicking(false)
+    const saved = load<ReplaySession | null>(KEY.replay, null)
+    if (saved && confirm('Lanjutkan sesi replay sebelumnya?\n\nOK = lanjutkan, Batal = mulai sesi baru.')) {
+      return void startReplay(saved.cursorTime, saved)
+    }
+    setPicking(true)
+  })
+
+  pickBar.addEventListener('click', (e) => {
+    const act = (e.target as HTMLElement).closest<HTMLElement>('[data-p]')?.dataset.p
+    if (act === 'random') void startReplay(randomStart())
+    if (act === 'cancel') setPicking(false)
+  })
+
+  // pick the start candle: capture phase on the wrapper runs before chart and drawing handlers
+  chartWrap.addEventListener(
+    'pointerdown',
+    (e) => {
+      if (!picking || e.button !== 0) return
+      const rect = chartEl.getBoundingClientRect()
+      const x = e.clientX - rect.left
+      if (x < 0 || x > chart.timeScale().width()) return
+      e.stopPropagation()
+      e.preventDefault()
+      const l = chart.timeScale().coordinateToLogical(x)
+      if (l === null) return
+      const i = Math.max(0, Math.min(Math.round(l), store.bars.length - 1))
+      const bar = store.bars[i]
+      // start at the end of the clicked candle: it is the last one shown
+      void startReplay(bar.time + store.tfSec - 1)
+    },
+    true,
+  )
+  chartWrap.addEventListener('pointermove', (e) => {
+    if (!picking) return
+    const rect = chartWrap.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    pickLine.hidden = x > chart.timeScale().width()
+    pickLine.style.left = `${x}px`
+  })
+
+  replayBar.addEventListener('click', (e) => {
+    const act = (e.target as HTMLElement).closest<HTMLElement>('[data-r]')?.dataset.r
+    if (!replay) return
+    if (act === 'play') playing ? stopPlay() : play()
+    if (act === 'step') {
+      stopPlay()
+      void stepOnce()
+    }
+    if (act === 'restart' && confirm('Ulang dari titik awal? Posisi dan riwayat sesi ini dihapus.')) void startReplay(replay.startTime)
+    if (act === 'exit') void exitReplay()
+  })
+  const speedSel = replayBar.querySelector<HTMLSelectElement>('[data-r="speed"]')!
+  for (const s of [1, 2, 5, 10, 20]) speedSel.add(new Option(`${s}×/detik`, String(s), false, s === speed))
+  speedSel.addEventListener('change', () => {
+    speed = Number(speedSel.value)
+    save(KEY.speed, speed)
+  })
+  replayBar.querySelector<HTMLInputElement>('[data-r="hide"]')!.addEventListener('change', (e) => {
+    if (!replay) return
+    replay.hideDate = (e.target as HTMLInputElement).checked
+    chart.applyOptions({}) // re-run time formatters
+    render()
+    saveSession(true)
+  })
+
+  window.addEventListener('keydown', (e) => {
+    const tag = (e.target as HTMLElement | null)?.tagName
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || tag === 'BUTTON') return
+    if (picking && e.key === 'Escape') setPicking(false)
+    if (!replay) return
+    if (e.key === 'ArrowRight' && e.shiftKey) {
+      e.preventDefault()
+      stopPlay()
+      void stepOnce()
+    } else if (e.key === ' ') {
+      e.preventDefault()
+      playing ? stopPlay() : play()
+    }
+  })
 }
 
 // ---------- controls ----------
@@ -392,8 +735,8 @@ function buildControls() {
 
   chart.subscribeCrosshairMove((p) => {
     updateLegend(p)
-    const i = p.logical !== undefined && p.point ? Math.round(p.logical) : store.bars.length - 1
-    indicators.legend(Math.min(Math.max(i, 0), store.bars.length - 1))
+    const i = p.logical !== undefined && p.point ? Math.round(p.logical) : shown.length - 1
+    indicators.legend(Math.min(Math.max(i, 0), shown.length - 1))
   })
 
   const indBtn = $('ind-btn')
@@ -419,10 +762,21 @@ function buildControls() {
     if (e.key === 'Escape' && !indMenu.hasAttribute('hidden')) setMenu(false)
   })
   chart.timeScale().subscribeVisibleLogicalRangeChange(onRangeChange)
+  buildReplayControls()
 }
 
 if (import.meta.env.DEV) {
-  ;(window as unknown as Record<string, unknown>).__rc = { chart, getStore: () => store, drawings, indicators }
+  ;(window as unknown as Record<string, unknown>).__rc = {
+    chart,
+    getStore: () => store,
+    getReplay: () => replay,
+    getShown: () => shown,
+    drawings,
+    indicators,
+    trade,
+    stepOnce,
+    startReplay,
+  }
 }
 
 // ---------- boot ----------

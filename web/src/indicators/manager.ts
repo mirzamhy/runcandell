@@ -71,7 +71,7 @@ export class IndicatorManager {
     this.configs.push(cfg)
     const inst = def.create(this.env, cfg)
     this.instances.set(cfg.id, inst)
-    if (this.ctx) inst.update(this.ctx)
+    if (this.ctx) inst.update({ ...this.ctx, incremental: false })
     this.save()
   }
 
@@ -84,7 +84,7 @@ export class IndicatorManager {
   }
 
   /** Recompute every indicator for the bars currently loaded on the chart. */
-  update(bars: Bar[], times: Time[], tfSec: number) {
+  update(bars: Bar[], times: Time[], tfSec: number, incremental = false) {
     const n = bars.length
     const ctx: Ctx = {
       times,
@@ -97,6 +97,7 @@ export class IndicatorManager {
       day: new Float64Array(n),
       intraday: tfSec < 86400,
       tfSec,
+      incremental,
     }
     for (let i = 0; i < n; i++) {
       const b = bars[i]
@@ -340,7 +341,7 @@ export class IndicatorManager {
     const inst = this.instances.get(id)
     if (!inst) return
     inst.restyle()
-    if (this.ctx) inst.update(this.ctx)
+    if (this.ctx) inst.update({ ...this.ctx, incremental: false })
     this.renderChips()
   }
 }
