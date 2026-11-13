@@ -115,3 +115,88 @@ export const api = {
   uploadShot: (id: number, img: Blob) => call('PUT', `/journal/${id}/shot`, img),
   shotUrl: (id: number) => `/api/journal/${id}/shot`,
 }
+
+// ---------- duel (F6) ----------
+
+export interface DuelParams {
+  mode: 'solo' | 'async'
+  rounds: number
+  analysisSec: number
+  runMinutes: number
+  hardcore: boolean
+}
+
+export interface DuelPlayer {
+  nickname: string
+  finished?: boolean
+  totalR?: number | null
+}
+
+/** GET /duels/:code. `rounds` is a number for non-members, the per-round results for members. */
+export interface DuelDetail extends Omit<DuelParams, 'rounds'> {
+  code: string
+  member: boolean
+  joinable?: boolean
+  status?: 'open' | 'done'
+  nextRound?: number | null
+  players: DuelPlayer[]
+  rounds: number | DuelRoundResult[]
+}
+
+export interface DuelRoundResult {
+  round: number
+  realTime: number | null
+  k: number | null
+  results: { nickname: string; side: string; r: number; reason: string }[]
+}
+
+export interface DuelListItem {
+  code: string
+  mode: 'solo' | 'async'
+  rounds: number
+  status: 'open' | 'done'
+  created_at: number
+  nextRound: number | null
+  players: DuelPlayer[]
+}
+
+export interface Snapshot {
+  round: number
+  rounds: number
+  analysisSec: number
+  runMinutes: number
+  hardcore: boolean
+  remaining: number
+  minStop: number
+  cut: import('./types').Bar
+  bars: Record<import('./types').TF, import('./types').Bar[]>
+}
+
+export interface DuelOutcome {
+  side: 'buy' | 'sell' | 'skip'
+  r: number
+  reason: string
+  entry: number | null
+  exit: number | null
+  exitTime: number | null
+  sl: number | null
+  tp: number | null
+}
+
+export interface DecideResult {
+  outcome: DuelOutcome
+  future: import('./types').Bar[]
+  breaks: Partial<Record<import('./types').TF, number[]>>
+  finished: boolean
+  totalR: number | null
+}
+
+export const duelApi = {
+  create: (p: DuelParams) => call<{ code: string }>('POST', '/duels', p),
+  list: () => call<{ items: DuelListItem[] }>('GET', '/duels'),
+  get: (code: string) => call<DuelDetail>('GET', `/duels/${encodeURIComponent(code)}`),
+  join: (code: string) => call<{ ok: true }>('POST', `/duels/${encodeURIComponent(code)}/join`),
+  start: (code: string, n: number) => call<Snapshot>('POST', `/duels/${encodeURIComponent(code)}/rounds/${n}/start`),
+  decide: (code: string, n: number, d: { side: 'buy' | 'sell' | 'skip'; sl?: number | null; tp?: number | null }) =>
+    call<DecideResult>('POST', `/duels/${encodeURIComponent(code)}/rounds/${n}/decide`, d),
+}

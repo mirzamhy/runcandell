@@ -511,6 +511,7 @@ button.primary:hover {
 /* ---------- replay + paper trading ---------- */
 
 #replay-btn,
+#duel-btn,
 #bt-btn {
   display: inline-flex;
   align-items: center;
@@ -518,6 +519,7 @@ button.primary:hover {
 }
 
 #replay-btn svg,
+#duel-btn svg,
 #bt-btn svg {
   width: 16px;
   height: 16px;
@@ -1522,4 +1524,105 @@ body.bt .tools {
     width: 100%;
     height: 140px;
   }
+}
+
+/* ---------- duel (F6) ---------- */
+
+body.duel .chart,
+body.duel .pane-layer {
+  bottom: var(--duel-h, 44px);
+}
+/* the decision bar wraps on narrow screens; main.ts tracks its height in --duel-h */
+.replay-bar.duel-bar {
+  height: auto;
+  min-height: 44px;
+  flex-wrap: wrap;
+  padding: 6px 10px;
+  overflow-x: visible;
+  white-space: normal;
+  row-gap: 6px;
+}
+.duel-bar[hidden],
+#price-pick[hidden] {
+  display: none;
+}
+.duel-round {
+  font-weight: 600;
+  color: var(--muted);
+}
+.duel-timer {
+  min-width: 46px;
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+.duel-timer.low {
+  color: var(--down);
+}
+.duel-side {
+  min-width: 56px;
+  font-weight: 700;
+}
+.duel-side.buy[aria-pressed='true'] {
+  background: #4c8dff;
+  border-color: #4c8dff;
+  color: #fff;
+}
+.duel-side.sell[aria-pressed='true'] {
+  background: var(--down);
+  border-color: var(--down);
+  color: #fff;
+}
+.duel-in {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.duel-in input {
+  width: 86px;
+}
+.duel-pick {
+  width: 30px;
+  padding: 0;
+}
+.duel-risk {
+  font-size: 12px;
+}
+.duel-result {
+  font-size: 14px;
+}
+.duel-result.pos b {
+  color: var(--up);
+}
+.duel-result.neg b {
+  color: var(--down);
+}
+.duel-link {
+  display: flex;
+  gap: 6px;
+  margin: 6px 0;
+}
+.duel-link input {
+  flex: 1;
+  min-width: 0;
+}
+.duel-win {
+  font-size: 15px;
+  color: var(--accent);
+}
+.acct-body .bt-table tr.total td {
+  border-top: 2px solid var(--border);
+}
+.acct-body .bt-table code {
+  color: var(--accent);
+}
+.seg-opt {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  font-size: 12px;
+  margin-right: 8px;
 }

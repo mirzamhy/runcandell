@@ -12,7 +12,7 @@ function setup(signupLimit = 10) {
       const h: Record<string, string> = { 'x-rc': '1', ...headers }
       if (cookie) h.cookie = cookie
       let payload: BodyInit | undefined
-      if (body instanceof Uint8Array) payload = body
+      if (body instanceof Uint8Array) payload = body as unknown as BodyInit
       else if (body !== undefined) {
         payload = JSON.stringify(body)
         h['content-type'] = 'application/json'

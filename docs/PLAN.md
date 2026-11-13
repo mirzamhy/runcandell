@@ -64,7 +64,7 @@ Data: XAUUSD M1 dari MetaTrader 5 (gratis), mulai 1 tahun (akun Exness standar, 
 - Jurnal trade: alasan entry, screenshot chart otomatis, tag setup, emosi.
 - Statistik pribadi lintas sesi.
 
-### F6 — Duel (konsep: snapshot → keputusan → reveal)
+### F6 — Duel (mode async + latihan selesai; live pindah ke F7)
 Dua user dapat potongan chart yang sama, analisa dalam batas waktu, pasang satu keputusan, lalu hasilnya diputar ke depan bersama.
 
 **Satu ronde:**

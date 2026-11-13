@@ -18,6 +18,7 @@ import {
 import './style.css'
 import { AccountUI } from './account'
 import { BacktestUI } from './backtest/ui'
+import { DuelUI, type DuelMarker } from './duel'
 import type { BtTrade } from './backtest/run'
 import { SeriesStore, TIMEFRAMES, dataSpan, loadManifest, type Bar, type Manifest, type TF } from './data'
 import { DrawingLayer, type Drawing, type Tool } from './drawings'
@@ -108,7 +109,11 @@ let speed = load<number>(KEY.speed, 5)
 let shown: Bar[] = []
 let shownTimes: Time[] = []
 
-const hideDate = () => !!replay?.hideDate
+/** duel mode: normalised bars per timeframe (null outside a duel) */
+let duelBars: Record<TF, Bar[]> | null = null
+let duelHard = false
+const hideDate = () => !!replay?.hideDate || !!duelBars
+const hideTime = () => !!duelBars && duelHard
 const displayTime = (t: number) => (tf === 'D1' ? d1DisplayTime(t) : shift(t))
 
 // ---------- chart ----------
@@ -140,7 +145,7 @@ const chart = createChart(chartEl, {
     // chart times are wall-clock seconds "as if UTC"; dates can be hidden for replay practice
     tickMarkFormatter: (time: Time, type: TickMarkType) => {
       const d = new Date((time as number) * 1000)
-      if (type === TickMarkType.Time || type === TickMarkType.TimeWithSeconds) return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`
+      if (type === TickMarkType.Time || type === TickMarkType.TimeWithSeconds) return hideTime() ? '' : `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`
       if (hideDate()) return ''
       if (type === TickMarkType.Year) return String(d.getUTCFullYear())
       if (type === TickMarkType.Month) return MONTHS[d.getUTCMonth()]
@@ -150,6 +155,7 @@ const chart = createChart(chartEl, {
   localization: {
     timeFormatter: (time: Time) => {
       const wall = time as number
+      if (hideTime()) return ''
       if (hideDate()) return tf === 'D1' ? '' : formatWall(wall).slice(11)
       return formatWall(wall, tf !== 'D1')
     },
@@ -293,7 +299,7 @@ const btOpen = () => document.body.classList.contains('bt')
 
 /** Entry arrows and exit dots of backtest trades inside the loaded window. */
 function syncBtMarkers() {
-  if (!btTrades || !btOpen() || replay || !shown.length) return btMarkers.setMarkers([])
+  if (!btTrades || !btOpen() || replay || duelBars || !shown.length) return btMarkers.setMarkers([])
   const first = shown[0].time
   const end = shown[shown.length - 1].time + store.tfSec
   const out: SeriesMarker<Time>[] = []
@@ -340,6 +346,152 @@ function setBacktest(open: boolean) {
   btBtn.setAttribute('aria-pressed', String(open))
   syncBtMarkers()
 }
+
+// ---------- duel (F6) ----------
+
+const duelBarEl = $('duel-bar')
+const pricePick = $('price-pick')
+const duelMarkersApi = createSeriesMarkers(candles, [])
+let duelMarks: DuelMarker[] = []
+let savedDrawings: Drawing[] | null = null
+let savedTF: TF = tf
+let pickResolve: ((p: number | null) => void) | null = null
+const duelLines = (['entry', 'sl', 'tp'] as const).map((k) =>
+  candles.createPriceLine({
+    price: 0,
+    color: k === 'entry' ? '#c9d1d9' : k === 'sl' ? '#ef5350' : '#26a69a',
+    lineWidth: 1,
+    lineStyle: k === 'entry' ? LineStyle.Solid : LineStyle.Dashed,
+    axisLabelVisible: false,
+    lineVisible: false,
+    title: k === 'entry' ? 'Entry' : k.toUpperCase(),
+  }),
+)
+
+/** A store over fixed bars (duel snapshot): no chunks, never loads. */
+function duelStore(t: TF): SeriesStore {
+  const s = new SeriesStore({ timeframes: { [t]: [] } } as unknown as Manifest, t)
+  s.bars = duelBars![t]
+  return s
+}
+
+function syncDuelMarkers() {
+  if (!duelBars || !shown.length) return duelMarkersApi.setMarkers([])
+  const out: SeriesMarker<Time>[] = []
+  for (const m of duelMarks) {
+    const i = floorIndex(shown, m.time)
+    if (i >= 0) out.push({ time: shownTimes[i], position: m.position, shape: m.shape, color: m.color, text: m.text })
+  }
+  out.sort((a, b) => (a.time as number) - (b.time as number))
+  duelMarkersApi.setMarkers(out)
+}
+
+const duelBtn = $<HTMLButtonElement>('duel-btn')
+new ResizeObserver(() => chartWrap.style.setProperty('--duel-h', `${duelBarEl.offsetHeight || 44}px`)).observe(duelBarEl)
+
+function setDuelUI(on: boolean) {
+  document.body.classList.toggle('duel', on)
+  duelBarEl.hidden = !on
+  for (const el of [gotoInput, gotoForm.querySelector('button')!, replayBtn, btBtn, duelBtn]) (el as HTMLButtonElement).disabled = on
+}
+
+const duel = new DuelUI($<HTMLDialogElement>('duel-dialog'), duelBarEl, {
+  requireLogin: () => account.requireLogin(),
+  enter: (bars, hardcore) => {
+    if (replay) {
+      // leave replay first; its session stays saved
+      stopPlay()
+      saveSession(true)
+      trade.detach()
+      replay = null
+      setReplayUI(false)
+    }
+    if (btOpen()) setBacktest(false)
+    if (!duelBars) {
+      savedDrawings = drawings.drawings
+      savedTF = tf
+      drawings.onChange = () => {}
+    }
+    drawings.load([])
+    duelBars = bars
+    duelHard = hardcore
+    duelMarks = []
+    setDuelUI(true)
+    chart.applyOptions({}) // re-run time formatters
+    store = duelStore(tf)
+    render()
+    showLatest(Math.min(currentSpan(), 160))
+  },
+  update: () => {
+    store.bars = duelBars![tf]
+    render({ incremental: true })
+  },
+  exit: () => {
+    duelBars = null
+    duelMarks = []
+    for (const l of duelLines) l.applyOptions({ lineVisible: false, axisLabelVisible: false })
+    duelMarkersApi.setMarkers([])
+    setDuelUI(false)
+    drawings.load(savedDrawings ?? [])
+    drawings.onChange = () => save(KEY.drawings, drawings.drawings)
+    chart.applyOptions({})
+    tf = savedTF
+    syncTFButtons()
+    void withBusy(async () => {
+      store = new SeriesStore(manifest, tf)
+      await store.loadAround(null)
+      render()
+      showLatest(160)
+    })
+  },
+  setLines: (l) => {
+    const v = [l.entry, l.sl, l.tp]
+    duelLines.forEach((line, i) => {
+      const p = v[i]
+      line.applyOptions(p === null ? { lineVisible: false, axisLabelVisible: false } : { price: p, lineVisible: true, axisLabelVisible: true })
+    })
+  },
+  setMarkers: (m) => {
+    duelMarks = m
+    syncDuelMarkers()
+  },
+  pickPrice: (label) =>
+    new Promise((res) => {
+      pickResolve?.(null)
+      pickResolve = res
+      pricePick.textContent = `${label} · Esc batal`
+      pricePick.hidden = false
+      chartWrap.classList.add('picking')
+    }),
+})
+
+function endPricePick(p: number | null) {
+  const r = pickResolve
+  pickResolve = null
+  pricePick.hidden = true
+  chartWrap.classList.remove('picking')
+  r?.(p)
+}
+
+// price pick: capture phase so drawings / chart do not also react to the click
+chartWrap.addEventListener(
+  'pointerdown',
+  (e) => {
+    if (!pickResolve || e.button !== 0) return
+    const rect = chartEl.getBoundingClientRect()
+    const price = candles.coordinateToPrice(e.clientY - rect.top)
+    e.stopPropagation()
+    e.preventDefault()
+    endPricePick(price === null ? null : Math.round(price * 100) / 100)
+  },
+  true,
+)
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && pickResolve) endPricePick(null)
+})
+window.addEventListener('beforeunload', (e) => {
+  if (duel.active && !duel.play?.revealed) e.preventDefault()
+})
 
 // ---------- rendering ----------
 
@@ -412,6 +564,7 @@ function render(opts: { incremental?: boolean } = {}) {
     trade.refresh()
     updateClock()
   } else syncBtMarkers()
+  if (duelBars) syncDuelMarkers()
 }
 
 const fmt = (n: number) => n.toFixed(2)
@@ -419,7 +572,7 @@ const fmt = (n: number) => n.toFixed(2)
 /** Bid/Ask lines at the newest visible bar (the replay cursor in replay mode). */
 function updateQuoteLines() {
   const last = shown[shown.length - 1]
-  const show = !!last && (replay ? true : store.atLatest)
+  const show = !!last && (replay || duelBars ? true : store.atLatest)
   const bidColor = last && last.close >= last.open ? color('--up') : color('--down')
   bidLine.applyOptions({ price: last?.close ?? 0, color: bidColor, lineVisible: show, axisLabelVisible: show })
   askLine.applyOptions({ price: last ? last.close + last.spread : 0, lineVisible: show, axisLabelVisible: show })
@@ -439,7 +592,7 @@ function updateLegend(param?: MouseEventParams<Time>) {
   const pct = (chg / (prev ? prev.close : b.open)) * 100
   const cls = chg >= 0 ? 'up' : 'down'
   const wall = displayTime(b.time)
-  const when = hideDate() ? (tf === 'D1' ? '' : formatWall(wall).slice(11)) : formatWall(wall, tf !== 'D1')
+  const when = hideTime() ? '' : hideDate() ? (tf === 'D1' ? '' : formatWall(wall).slice(11)) : formatWall(wall, tf !== 'D1')
   legendEl.innerHTML = [
     `<span><b>${manifest.symbol}</b> · ${tf}${when ? ` · ${when}` : ''}</span>`,
     `<span><span class="k">O</span>${fmt(b.open)}</span>`,
@@ -455,6 +608,10 @@ function updateLegend(param?: MouseEventParams<Time>) {
 
 function updateStatus() {
   const zoneLabel = ZONES.find((z) => z.id === zone)?.label ?? zone
+  if (duelBars) {
+    statusInfo.textContent = `Duel ${tf} · harga dinormalisasi, tanggal${duelHard ? ' dan jam' : ''} disembunyikan · Ask = Bid + spread`
+    return
+  }
   if (replay) {
     statusInfo.textContent =
       `Replay ${tf} · ${hideDate() ? 'tanggal disembunyikan' : `mulai ${formatWall(shift(replay.startTime))}`} · ` +
@@ -513,6 +670,14 @@ function currentSpan() {
 }
 
 async function switchTF(next: TF) {
+  if (duelBars) {
+    tf = next
+    syncTFButtons()
+    store = duelStore(next)
+    render()
+    showLatest(Math.min(currentSpan(), 160))
+    return
+  }
   const r = chart.timeScale().getVisibleLogicalRange()
   let centerT: number | null = null
   let span = 160
@@ -549,6 +714,7 @@ async function goTo(t: number) {
 
 async function goLatest() {
   const span = currentSpan()
+  if (duelBars) return showLatest(span)
   await withBusy(async () => {
     if (!replay && !store.atLatest) {
       await store.loadAround(null)
@@ -560,7 +726,7 @@ async function goLatest() {
 
 /** Load neighbouring chunks when the user scrolls near the edge of what is loaded. */
 function onRangeChange(r: LogicalRange | null) {
-  if (!r || busy || !store) return
+  if (!r || busy || !store || duelBars) return
   const n = store.bars.length
   if (r.from < 200 && store.canLeft) {
     void withBusy(async () => {
@@ -888,6 +1054,7 @@ function buildControls() {
   chart.timeScale().subscribeVisibleLogicalRangeChange(onRangeChange)
   buildReplayControls()
   btBtn.addEventListener('click', () => setBacktest(!btOpen()))
+  duelBtn.addEventListener('click', () => void duel.open())
 }
 
 if (import.meta.env.DEV) {
@@ -903,6 +1070,7 @@ if (import.meta.env.DEV) {
     startReplay,
     getBacktest: () => bt,
     setBacktest,
+    duel,
   }
 }
 
@@ -931,7 +1099,10 @@ async function boot() {
   }
   render()
   showLatest(160)
-  void account.init()
+  void account.init().then(() => {
+    const code = new URLSearchParams(location.search).get('duel')
+    if (code) void duel.open(code)
+  })
   gotoInput.value = toInputValue(displayTime(store.bars[store.bars.length - 1].time))
   showOverlay(null)
 }

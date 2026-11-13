@@ -1,0 +1,378 @@
+/**
+ * Duel API (async + solo). The server owns everything that decides a round:
+ * it picks cuts, sends only candles up to the cut, times the analysis, validates and scores
+ * the decision with the shared engine, and only then sends the candles after the cut.
+ */
+import type { Context, Hono } from 'hono'
+import { randomInt } from 'node:crypto'
+import type { DatabaseSync } from 'node:sqlite'
+import type { Bar, TF } from '../../web/src/types.ts'
+import {
+  DUEL_TFS,
+  SNAPSHOT_COUNT,
+  TF_SEC,
+  checkDecision,
+  findCut,
+  floorIdx,
+  makeNorm,
+  minStop,
+  normBar,
+  normPrice,
+  normTime,
+  realPrice,
+  runDecision,
+  snapshotTF,
+  type Decision,
+  type Norm,
+  type Outcome,
+} from '../../web/src/engine/duel.ts'
+import type { Env } from './app.ts'
+import { HttpError, json } from './http.ts'
+import type { MarketData } from './market.ts'
+
+/** seconds of network slack on top of the analysis timer */
+export const GRACE = 5
+const DAY = 86400
+const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+
+interface DuelRow {
+  id: number
+  code: string
+  mode: 'solo' | 'async'
+  rounds: number
+  analysis_sec: number
+  run_minutes: number
+  hardcore: number
+  status: 'open' | 'done'
+  created_by: number
+  created_at: number
+}
+interface RoundRow {
+  round_no: number
+  cut_time: number
+  k: number
+}
+interface DecisionRow {
+  round_no: number
+  user_id: number
+  sent_at: number
+  submitted_at: number | null
+  side: string | null
+  sl: number | null
+  tp: number | null
+  entry: number | null
+  exit: number | null
+  exit_time: number | null
+  reason: string | null
+  r: number | null
+}
+
+const pick = <T extends readonly unknown[]>(v: unknown, allowed: T, field: string): T[number] => {
+  if (!allowed.includes(v)) throw new HttpError(400, `${field} tidak valid.`)
+  return v as T[number]
+}
+
+export function mountDuels(app: Hono<Env>, db: DatabaseSync, market: MarketData | null, now: () => number) {
+  const needMarket = (): MarketData => {
+    if (!market) throw new HttpError(503, 'Data candle belum tersedia di server.')
+    return market
+  }
+
+  const duelByCode = (code: string): DuelRow => {
+    const d = db.prepare('SELECT * FROM duels WHERE code = ?').get(code.toUpperCase()) as DuelRow | undefined
+    if (!d) throw new HttpError(404, 'Duel tidak ditemukan.')
+    return d
+  }
+  const players = (duelId: number) =>
+    db
+      .prepare('SELECT p.user_id, u.nickname, p.finished_at, p.total_r FROM duel_players p JOIN users u ON u.id = p.user_id WHERE p.duel_id = ? ORDER BY p.joined_at')
+      .all(duelId) as { user_id: number; nickname: string; finished_at: number | null; total_r: number | null }[]
+  const isMember = (duelId: number, userId: number) => !!db.prepare('SELECT 1 FROM duel_players WHERE duel_id = ? AND user_id = ?').get(duelId, userId)
+  const roundOf = (duelId: number, n: number) => {
+    const r = db.prepare('SELECT round_no, cut_time, k FROM duel_rounds WHERE duel_id = ? AND round_no = ?').get(duelId, n) as RoundRow | undefined
+    if (!r) throw new HttpError(404, 'Ronde tidak ditemukan.')
+    return r
+  }
+  const decisions = (duelId: number, userId?: number) =>
+    (userId === undefined
+      ? db.prepare('SELECT * FROM duel_decisions WHERE duel_id = ? ORDER BY round_no').all(duelId)
+      : db.prepare('SELECT * FROM duel_decisions WHERE duel_id = ? AND user_id = ? ORDER BY round_no').all(duelId, userId)) as unknown as DecisionRow[]
+  /** next round to play, or null when finished */
+  const currentRound = (d: DuelRow, userId: number) => {
+    const done = decisions(d.id, userId).filter((x) => x.side !== null).length
+    return done < d.rounds ? done + 1 : null
+  }
+
+  /** Mark the duel done once every player finished (solo: 1 player, async: 2). */
+  const settle = (d: DuelRow) => {
+    const ps = players(d.id)
+    const need = d.mode === 'solo' ? 1 : 2
+    if (ps.length >= need && ps.every((p) => p.finished_at !== null)) db.prepare("UPDATE duels SET status = 'done' WHERE id = ?").run(d.id)
+  }
+
+  const store = (d: DuelRow, userId: number, n: number, o: Outcome, timeout: boolean) => {
+    db.prepare(
+      'UPDATE duel_decisions SET submitted_at = ?, side = ?, sl = ?, tp = ?, entry = ?, exit = ?, exit_time = ?, reason = ?, r = ? WHERE duel_id = ? AND round_no = ? AND user_id = ?',
+    ).run(now(), o.side, o.sl, o.tp, o.entry, o.exit, o.exitTime, timeout ? 'timeout' : o.reason, o.r, d.id, n, userId)
+    if (n === d.rounds) {
+      const total = decisions(d.id, userId).reduce((s, x) => s + (x.r ?? 0), 0)
+      db.prepare('UPDATE duel_players SET finished_at = ?, total_r = ? WHERE duel_id = ? AND user_id = ?').run(now(), Math.round(total * 1000) / 1000, d.id, userId)
+      settle(d)
+    }
+  }
+
+  const SKIP: Outcome = { side: 'skip', r: 0, reason: 'skip', entry: null, exit: null, exitTime: null, sl: null, tp: null }
+
+  /** Rounds whose analysis time ran out without a decision become skips. */
+  const sweep = (d: DuelRow, userId: number) => {
+    for (const x of decisions(d.id, userId))
+      if (x.side === null && now() > x.sent_at + d.analysis_sec + GRACE) store(d, userId, x.round_no, SKIP, true)
+  }
+
+  // ---------- market helpers ----------
+
+  async function pickRounds(m: MarketData, count: number, runMinutes: number): Promise<{ cut: number; k: number }[]> {
+    const span = await m.span()
+    const lo = span.from + 45 * DAY // enough history for H4/D1 context
+    const hi = span.to - 2 * DAY - runMinutes * 60
+    if (hi <= lo) throw new HttpError(503, 'Data candle terlalu pendek untuk duel.')
+    const out: { cut: number; k: number }[] = []
+    for (let tries = 0; out.length < count && tries < count * 30; tries++) {
+      const t = lo + randomInt(0, hi - lo)
+      const m1 = await m.bars('M1', t, t + 3 * DAY)
+      if (m1.length < runMinutes + 2) continue
+      const i = findCut(m1, randomInt(0, Math.max(1, Math.min(m1.length - runMinutes - 1, 1440))), runMinutes)
+      if (i < 0) continue
+      const cut = m1[i].time
+      if (out.some((x) => Math.abs(x.cut - cut) < DAY)) continue
+      out.push({ cut, k: Math.round((0.7 + randomInt(0, 701) / 1000) * 1000) / 1000 })
+    }
+    if (out.length < count) throw new HttpError(503, 'Gagal memilih titik potong. Coba lagi.')
+    return out
+  }
+
+  async function cutContext(m: MarketData, r: RoundRow) {
+    const m1 = await m.bars('M1', r.cut_time - 5 * DAY, r.cut_time + 1)
+    const i = floorIdx(m1, r.cut_time)
+    if (i < 0 || m1[i].time !== r.cut_time) throw new HttpError(503, 'Candle titik potong tidak ditemukan.')
+    return { m1, cut: m1[i], norm: makeNorm(m1[i], r.k) }
+  }
+
+  async function future(m: MarketData, r: RoundRow, runMinutes: number) {
+    return (await m.bars('M1', r.cut_time + 1, r.cut_time + runMinutes * 60 * 2 + 3600)).slice(0, runMinutes)
+  }
+
+  const outcomeOut = (n: Norm, o: Outcome) => ({
+    side: o.side,
+    r: o.r,
+    reason: o.reason,
+    entry: o.entry === null ? null : normPrice(n, o.entry),
+    exit: o.exit === null ? null : normPrice(n, o.exit),
+    exitTime: o.exitTime === null ? null : normTime(n, o.exitTime),
+    sl: o.sl === null ? null : normPrice(n, o.sl),
+    tp: o.tp === null ? null : normPrice(n, o.tp),
+  })
+  const rowOutcome = (x: DecisionRow): Outcome => ({
+    side: (x.side ?? 'skip') as Outcome['side'],
+    r: x.r ?? 0,
+    reason: (x.reason ?? 'skip') as Outcome['reason'],
+    entry: x.entry,
+    exit: x.exit,
+    exitTime: x.exit_time,
+    sl: x.sl,
+    tp: x.tp,
+  })
+
+  // ---------- routes ----------
+
+  app.post('/api/duels', async (c) => {
+    const b = await json(c)
+    const mode = pick(b.mode, ['solo', 'async'] as const, 'Mode')
+    const rounds = pick(b.rounds, [1, 3, 5, 7, 10] as const, 'Jumlah ronde')
+    const analysisSec = pick(b.analysisSec, [30, 60, 90, 120, 180, 300] as const, 'Waktu analisa')
+    const runMinutes = pick(b.runMinutes, [30, 60, 90, 120, 240] as const, 'Jendela run')
+    const hardcore = b.hardcore === true
+    const chosen = await pickRounds(needMarket(), rounds, runMinutes)
+    let code = ''
+    for (let i = 0; i < 8; i++) code += CODE_CHARS[randomInt(0, CODE_CHARS.length)]
+    const user = c.get('user')
+    db.exec('BEGIN')
+    try {
+      const r = db
+        .prepare("INSERT INTO duels (code, mode, rounds, analysis_sec, run_minutes, hardcore, status, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?)")
+        .run(code, mode, rounds, analysisSec, runMinutes, hardcore ? 1 : 0, user.id, now())
+      const id = Number(r.lastInsertRowid)
+      chosen.forEach((x, i) => db.prepare('INSERT INTO duel_rounds (duel_id, round_no, cut_time, k) VALUES (?, ?, ?, ?)').run(id, i + 1, x.cut, x.k))
+      db.prepare('INSERT INTO duel_players (duel_id, user_id, joined_at) VALUES (?, ?, ?)').run(id, user.id, now())
+      db.exec('COMMIT')
+    } catch (e) {
+      db.exec('ROLLBACK')
+      throw e
+    }
+    return c.json({ code }, 201)
+  })
+
+  app.get('/api/duels', (c) => {
+    const user = c.get('user')
+    const rows = db
+      .prepare('SELECT d.* FROM duels d JOIN duel_players p ON p.duel_id = d.id WHERE p.user_id = ? ORDER BY d.created_at DESC LIMIT 100')
+      .all(user.id) as unknown as DuelRow[]
+    return c.json({
+      items: rows.map((d) => {
+        sweep(d, user.id)
+        const ps = players(d.id)
+        const fresh = db.prepare('SELECT status FROM duels WHERE id = ?').get(d.id) as { status: string }
+        return {
+          code: d.code,
+          mode: d.mode,
+          rounds: d.rounds,
+          status: fresh.status,
+          created_at: d.created_at,
+          nextRound: currentRound(d, user.id),
+          players: ps.map((p) => ({
+            nickname: p.nickname,
+            finished: p.finished_at !== null,
+            totalR: fresh.status === 'done' || p.user_id === user.id ? p.total_r : null,
+          })),
+        }
+      }),
+    })
+  })
+
+  app.get('/api/duels/:code', (c) => {
+    const user = c.get('user')
+    const d = duelByCode(c.req.param('code'))
+    const params = { code: d.code, mode: d.mode, rounds: d.rounds, analysisSec: d.analysis_sec, runMinutes: d.run_minutes, hardcore: !!d.hardcore }
+    const member = isMember(d.id, user.id)
+    const ps = players(d.id)
+    if (!member) {
+      const joinable = d.mode === 'async' && ps.length < 2
+      return c.json({ ...params, member: false, joinable, players: ps.map((p) => ({ nickname: p.nickname })) })
+    }
+    sweep(d, user.id)
+    const status = (db.prepare('SELECT status FROM duels WHERE id = ?').get(d.id) as { status: string }).status
+    const done = status === 'done'
+    const rounds = (db.prepare('SELECT round_no, cut_time, k FROM duel_rounds WHERE duel_id = ? ORDER BY round_no').all(d.id) as unknown as RoundRow[]).map((r) => {
+      const all = decisions(d.id).filter((x) => x.round_no === r.round_no && x.side !== null)
+      const visible = done ? all : all.filter((x) => x.user_id === user.id)
+      return {
+        round: r.round_no,
+        // the real date and scale are revealed only after the duel is over
+        realTime: done ? r.cut_time : null,
+        k: done ? r.k : null,
+        results: visible.map((x) => ({ nickname: ps.find((p) => p.user_id === x.user_id)?.nickname ?? '?', side: x.side, r: x.r, reason: x.reason })),
+      }
+    })
+    return c.json({
+      ...params,
+      member: true,
+      status,
+      nextRound: currentRound(d, user.id),
+      players: players(d.id).map((p) => ({ nickname: p.nickname, finished: p.finished_at !== null, totalR: done || p.user_id === user.id ? p.total_r : null })),
+      rounds,
+    })
+  })
+
+  app.post('/api/duels/:code/join', (c) => {
+    const user = c.get('user')
+    const d = duelByCode(c.req.param('code'))
+    if (isMember(d.id, user.id)) return c.json({ ok: true })
+    if (d.mode !== 'async' || players(d.id).length >= 2) throw new HttpError(409, 'Duel sudah penuh.')
+    db.prepare('INSERT INTO duel_players (duel_id, user_id, joined_at) VALUES (?, ?, ?)').run(d.id, user.id, now())
+    return c.json({ ok: true })
+  })
+
+  const roundParam = (c: Context) => {
+    const n = Number(c.req.param('n'))
+    if (!Number.isInteger(n) || n < 1) throw new HttpError(404, 'Ronde tidak ditemukan.')
+    return n
+  }
+
+  app.post('/api/duels/:code/rounds/:n/start', async (c) => {
+    const user = c.get('user')
+    const d = duelByCode(c.req.param('code'))
+    if (!isMember(d.id, user.id)) throw new HttpError(403, 'Kamu bukan peserta duel ini.')
+    const n = roundParam(c)
+    sweep(d, user.id)
+    const next = currentRound(d, user.id)
+    if (next !== n) throw new HttpError(409, next === null ? 'Duel sudah selesai.' : `Sekarang ronde ${next}.`)
+    const m = needMarket()
+    const r = roundOf(d.id, n)
+    let row = db.prepare('SELECT * FROM duel_decisions WHERE duel_id = ? AND round_no = ? AND user_id = ?').get(d.id, n, user.id) as DecisionRow | undefined
+    if (!row) {
+      db.prepare('INSERT INTO duel_decisions (duel_id, round_no, user_id, sent_at) VALUES (?, ?, ?, ?)').run(d.id, n, user.id, now())
+      row = db.prepare('SELECT * FROM duel_decisions WHERE duel_id = ? AND round_no = ? AND user_id = ?').get(d.id, n, user.id) as unknown as DecisionRow
+    }
+    const { m1, cut, norm } = await cutContext(m, r)
+    const bars: Partial<Record<TF, Bar[]>> = {}
+    for (const tf of DUEL_TFS) {
+      const count = SNAPSHOT_COUNT[tf]
+      const src = tf === 'M1' ? [] : await m.bars(tf, r.cut_time - count * TF_SEC[tf] * 2 - 5 * DAY, r.cut_time + 1)
+      bars[tf] = snapshotTF(src, m1, r.cut_time, count, tf === 'M1').map((b) => normBar(norm, b))
+    }
+    return c.json({
+      round: n,
+      rounds: d.rounds,
+      analysisSec: d.analysis_sec,
+      runMinutes: d.run_minutes,
+      hardcore: !!d.hardcore,
+      remaining: Math.max(0, row.sent_at + d.analysis_sec - now()),
+      minStop: Math.round(minStop(m1.slice(0, floorIdx(m1, r.cut_time) + 1)) * norm.k * 1000) / 1000,
+      cut: normBar(norm, cut),
+      bars,
+    })
+  })
+
+  app.post('/api/duels/:code/rounds/:n/decide', async (c) => {
+    const user = c.get('user')
+    const d = duelByCode(c.req.param('code'))
+    if (!isMember(d.id, user.id)) throw new HttpError(403, 'Kamu bukan peserta duel ini.')
+    const n = roundParam(c)
+    const row = db.prepare('SELECT * FROM duel_decisions WHERE duel_id = ? AND round_no = ? AND user_id = ?').get(d.id, n, user.id) as DecisionRow | undefined
+    if (!row) throw new HttpError(409, 'Ronde belum dimulai.')
+    const m = needMarket()
+    const r = roundOf(d.id, n)
+    const { m1, cut, norm } = await cutContext(m, r)
+
+    let outcome: Outcome
+    let timeout = false
+    if (row.side !== null) outcome = rowOutcome(row)
+    else {
+      const b = await json(c)
+      const side = pick(b.side, ['buy', 'sell', 'skip'] as const, 'Keputusan')
+      const late = now() > row.sent_at + d.analysis_sec + GRACE
+      if (late) {
+        outcome = SKIP
+        timeout = true
+      } else {
+        const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? realPrice(norm, v) : null)
+        const dec: Decision = { side, sl: num(b.sl), tp: b.tp === null || b.tp === undefined ? null : num(b.tp) }
+        const stop = minStop(m1.slice(0, floorIdx(m1, r.cut_time) + 1))
+        const err = checkDecision(dec, cut, stop, (x) => (x * norm.k).toFixed(2))
+        if (err) throw new HttpError(400, err)
+        outcome = runDecision(cut, await future(m, r, d.run_minutes), dec)
+      }
+      store(d, user.id, n, outcome, timeout)
+    }
+
+    // only now: the candles after the cut, plus where each timeframe starts a new candle
+    const fut = await future(m, r, d.run_minutes)
+    const end = fut.length ? fut[fut.length - 1].time : r.cut_time
+    const breaks: Partial<Record<TF, number[]>> = {}
+    for (const tf of DUEL_TFS) {
+      if (tf === 'M1') continue
+      breaks[tf] = (await m.bars(tf, r.cut_time + 1, end + 1)).map((b) => normTime(norm, b.time))
+    }
+    const me = db.prepare('SELECT finished_at, total_r FROM duel_players WHERE duel_id = ? AND user_id = ?').get(d.id, user.id) as {
+      finished_at: number | null
+      total_r: number | null
+    }
+    return c.json({
+      outcome: { ...outcomeOut(norm, outcome), reason: timeout ? 'timeout' : (row.reason ?? outcome.reason) },
+      future: fut.map((b) => normBar(norm, b)),
+      breaks,
+      finished: me.finished_at !== null,
+      totalR: me.total_r,
+    })
+  })
+}

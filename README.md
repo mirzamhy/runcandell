@@ -40,6 +40,13 @@ Akun & jurnal (F5), lewat tombol **Masuk** di kanan atas (butuh server API):
 - Statistik pribadi lintas sesi: win rate, net, rata-rata R, per setup dan per emosi.
 - Simpan sesi replay ke akun (tombol **Simpan** di bar replay) dan lanjutkan dari perangkat mana pun. Simpan hasil backtest, pakai lagi strateginya, atau jadikan pembanding A.
 
+Duel (F6), lewat tombol **Duel** (butuh server API dan login):
+- Buat duel lawan (kirim link/kode ke teman) atau latihan sendiri. Atur jumlah ronde, waktu analisa, jendela run, mode hardcore (jam juga disembunyikan).
+- Tiap ronde: chart dipotong di titik acak, harga dinormalisasi (`p' = (p - anchor) × k + 1000`) dan tanggal disembunyikan. Semua timeframe dan indikator boleh dipakai.
+- Pilih BUY/SELL dengan SL wajib (TP opsional; bisa klik chart untuk set harga) atau Skip, sebelum waktu habis.
+- Candle sesudah titik potong baru dikirim server setelah keputusan terkunci, lalu diputar. Skor dalam R (kena SL = -1R, spread dihitung). Waktu habis = skip.
+- Hasil lawan baru terlihat setelah dua pemain selesai; tanggal asli tiap ronde dibuka di akhir.
+
 ```bash
 cd server
 npm install

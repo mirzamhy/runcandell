@@ -119,7 +119,11 @@ export class Account {
   recordEquity = true
   onEvent: (e: AccountEvent) => void = () => {}
 
-  constructor(readonly cfg: AccountConfig = DEFAULT_CONFIG) {
+  readonly cfg: AccountConfig
+
+  // no parameter properties: the duel server runs this file with Node's plain type stripping
+  constructor(cfg: AccountConfig = DEFAULT_CONFIG) {
+    this.cfg = cfg
     this.balance = cfg.balance
   }
 

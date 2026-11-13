@@ -65,6 +65,52 @@ const MIGRATIONS = [
     data BLOB NOT NULL
   );
   `,
+  `
+  CREATE TABLE duels (
+    id INTEGER PRIMARY KEY,
+    code TEXT NOT NULL UNIQUE,
+    mode TEXT NOT NULL,
+    rounds INTEGER NOT NULL,
+    analysis_sec INTEGER NOT NULL,
+    run_minutes INTEGER NOT NULL,
+    hardcore INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    created_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at INTEGER NOT NULL
+  );
+  CREATE TABLE duel_rounds (
+    duel_id INTEGER NOT NULL REFERENCES duels(id) ON DELETE CASCADE,
+    round_no INTEGER NOT NULL,
+    cut_time INTEGER NOT NULL,
+    k REAL NOT NULL,
+    PRIMARY KEY (duel_id, round_no)
+  );
+  CREATE TABLE duel_players (
+    duel_id INTEGER NOT NULL REFERENCES duels(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    joined_at INTEGER NOT NULL,
+    finished_at INTEGER,
+    total_r REAL,
+    PRIMARY KEY (duel_id, user_id)
+  );
+  CREATE INDEX duel_players_user ON duel_players(user_id);
+  CREATE TABLE duel_decisions (
+    duel_id INTEGER NOT NULL REFERENCES duels(id) ON DELETE CASCADE,
+    round_no INTEGER NOT NULL,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    sent_at INTEGER NOT NULL,
+    submitted_at INTEGER,
+    side TEXT,
+    sl REAL,
+    tp REAL,
+    entry REAL,
+    exit REAL,
+    exit_time INTEGER,
+    reason TEXT,
+    r REAL,
+    PRIMARY KEY (duel_id, round_no, user_id)
+  );
+  `,
 ]
 
 export function openDb(path: string): DatabaseSync {
