@@ -870,16 +870,75 @@ input:disabled {
   cursor: not-allowed;
 }
 
+/* compact dock head: only on small screens, where the panel folds under the chart */
+.dock-head {
+  display: none;
+}
+
 @media (max-width: 900px) {
   body.replay .workspace {
     grid-template-columns: 40px minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-rows: minmax(max(260px, 42vh), 1fr) auto;
   }
   body.replay .trade {
     grid-column: 1 / -1;
-    max-height: 42vh;
+    max-height: 45vh;
+    padding: 8px 10px;
     border-left: 0;
     border-top: 1px solid var(--border);
+  }
+  /* folded: the chart keeps the room, the head still trades at market */
+  body.replay .trade:not(.open) > :not(.dock-head) {
+    display: none;
+  }
+  .dock-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    position: sticky;
+    top: -8px;
+    z-index: 1;
+    margin: -8px -10px 0;
+    padding: 8px 10px;
+    background: var(--panel);
+  }
+  .trade.open .dock-head {
+    border-bottom: 1px solid var(--border);
+  }
+  /* unfolded: the ticket has its own SELL/BUY */
+  .trade.open .dock-head .sell,
+  .trade.open .dock-head .buy {
+    display: none;
+  }
+  .dock-toggle {
+    flex: none;
+    font-weight: 600;
+  }
+  .trade.open .dock-toggle span {
+    display: inline-block;
+    transform: rotate(180deg);
+  }
+  .dock-pl {
+    display: grid;
+    min-width: 70px;
+  }
+  .dock-pl .k {
+    font-size: 10px;
+  }
+  .dock-head .sell,
+  .dock-head .buy {
+    flex: 1;
+    min-height: 34px;
+    border: 0;
+    color: #fff;
+    font-weight: 600;
+    font-size: 12px;
+  }
+  .dock-head .sell {
+    background: #c43d3a;
+  }
+  .dock-head .buy {
+    background: #2f6fe0;
   }
   .replay-bar .hide-date span {
     display: none;
@@ -1626,4 +1685,405 @@ body.duel .pane-layer {
   align-items: center;
   font-size: 12px;
   margin-right: 8px;
+}
+
+/* ---------- trade cards (positions / orders): fit the panel, no sideways scroll ---------- */
+.trade {
+  overflow-x: hidden;
+}
+.cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.card-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 12px;
+}
+.cr-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.cr-top b.buy {
+  color: #4c8dff;
+}
+.cr-top b.sell {
+  color: var(--down);
+}
+.cr-at {
+  color: var(--muted);
+}
+.cr-pnl {
+  margin-left: auto;
+}
+.cr-top .lv.price {
+  margin-left: auto;
+  flex: 0 1 120px;
+}
+.cr-lv {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.lv {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 0 2px 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.lv > span {
+  flex: none;
+  font-size: 11px;
+  font-weight: 600;
+}
+.lv.sl > span {
+  color: var(--down);
+}
+.lv.tp > span {
+  color: var(--up);
+}
+.tab-body .lv input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 26px;
+  border: 0;
+  background: transparent;
+}
+.lv-x {
+  flex: none;
+  min-height: 0;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+}
+.lv-x:hover {
+  color: var(--down);
+}
+.lv-add {
+  min-height: 28px;
+  border-style: dashed;
+  font-size: 12px;
+  font-weight: 600;
+}
+.lv-add.sl {
+  color: var(--down);
+}
+.lv-add.tp {
+  color: var(--up);
+}
+.cards-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+}
+.cards-foot .hint {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+.cards-foot .link {
+  flex: none;
+  margin: 0;
+}
+
+/* ---------- drawing toolbar ---------- */
+.tool-group {
+  position: relative;
+}
+.tool-caret {
+  position: absolute;
+  right: -4px;
+  bottom: 0;
+  width: 10px !important;
+  height: 12px !important;
+  min-height: 0;
+  padding: 0;
+  border: 0 !important;
+  background: transparent !important;
+  opacity: 0.55;
+}
+.tool-caret::after {
+  content: '';
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  border: 3px solid transparent;
+  border-right-color: currentColor;
+  border-bottom-color: currentColor;
+}
+.tool-caret:hover {
+  opacity: 1;
+}
+.tools .solid {
+  fill: currentColor;
+  stroke: none;
+}
+.tools .magnet[data-mode='weak'] svg {
+  color: var(--accent);
+  opacity: 0.7;
+}
+.tools .magnet[data-mode='strong'] svg {
+  color: var(--accent);
+}
+.tool-fly {
+  position: fixed;
+  z-index: 60;
+  min-width: 210px;
+  padding: 6px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+.tool-fly[hidden] {
+  display: none;
+}
+.tool-fly p {
+  margin: 2px 6px 6px;
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.tool-fly button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+.tool-fly button:hover,
+.tool-fly button[aria-pressed='true'] {
+  background: var(--hover);
+}
+.tool-fly svg {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: #4c8dff;
+}
+.tool-fly .solid {
+  fill: currentColor;
+  stroke: none;
+}
+
+/* ---------- style bar for the selected drawing ---------- */
+.draw-bar {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 7;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 90px);
+  padding: 5px 8px;
+  overflow-x: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  white-space: nowrap;
+}
+.draw-bar[hidden] {
+  display: none;
+}
+.db-name {
+  font-size: 12px;
+  color: var(--muted);
+  padding-right: 2px;
+}
+.db-sep {
+  flex: none;
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+}
+.db-colors,
+.db-widths,
+.db-dash {
+  display: flex;
+  gap: 3px;
+}
+.draw-bar button {
+  min-height: 0;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-color: transparent;
+  background: transparent;
+}
+.draw-bar button[aria-pressed='true'] {
+  border-color: var(--accent);
+}
+.draw-bar .sw {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--c);
+  border: 2px solid transparent;
+}
+.draw-bar .sw[aria-pressed='true'] {
+  border-color: #fff;
+}
+.draw-bar label.sw {
+  position: relative;
+  overflow: hidden;
+  background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red);
+  cursor: pointer;
+}
+.draw-bar label.sw input {
+  position: absolute;
+  inset: -4px;
+  opacity: 0;
+  cursor: pointer;
+}
+.db-widths i {
+  display: block;
+  width: 16px;
+  background: currentColor;
+  border-radius: 2px;
+}
+.db-dash svg {
+  width: 22px;
+  height: 8px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+}
+.draw-bar > button svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+}
+.db-text {
+  width: 140px;
+  min-height: 26px;
+  padding: 2px 6px;
+}
+
+/* ---------- right-click menu ---------- */
+.ctx-menu {
+  position: fixed;
+  z-index: 70;
+  min-width: 230px;
+  padding: 5px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.55);
+}
+.ctx-menu[hidden] {
+  display: none;
+}
+.ctx-menu button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  min-height: 30px;
+  padding: 4px 10px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font-size: 13px;
+}
+.ctx-menu button:hover:not(:disabled),
+.ctx-menu button:focus-visible {
+  background: var(--hover);
+}
+.ctx-menu button.danger {
+  color: var(--down);
+}
+.ctx-menu kbd {
+  font: inherit;
+  font-size: 11px;
+  color: var(--muted);
+}
+.ctx-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
+}
+
+/* ---------- replay guide ---------- */
+.replay-help {
+  position: absolute;
+  right: 12px;
+  bottom: 56px;
+  z-index: 8;
+  width: min(360px, calc(100% - 24px));
+  padding: 14px 16px;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.55);
+  font-size: 13px;
+}
+.replay-help[hidden] {
+  display: none;
+}
+.replay-help h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+.replay-help ol {
+  margin: 0 0 10px;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  line-height: 1.4;
+}
+.replay-help kbd {
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+}
+.replay-bar .rb-label {
+  font-size: 12px;
+}
+.tools {
+  overflow-y: auto;
+  overflow-x: visible;
+}
+@media (max-width: 640px) {
+  .replay-bar .rb-label {
+    display: none;
+  }
 }

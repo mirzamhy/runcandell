@@ -60,6 +60,7 @@ async function playIntro() {
   const intro = $('intro')
   const eyes = $('intro-eyes')
   const welcome = $('intro-welcome')
+  const arenaTitle = $('intro-arena')
   let skipped = false
   let done!: () => void
   const finished = new Promise<void>((r) => (done = r))
@@ -86,9 +87,12 @@ async function playIntro() {
   if (!skipped) eyes.classList.add('on') // dot, slit, open: ~2.5 s
   await step(2500)
   if (!skipped) welcome.classList.add('on') // flickers on, then glitches
-  await step(2600)
+  await step(900)
+  if (!skipped) arenaTitle.classList.add('on') // ... TO ARENA
+  await step(2300)
   if (!skipped) {
     welcome.classList.add('out')
+    arenaTitle.classList.add('out')
     // the 3D mask comes out of the dark around the eyes, still, in purple fire
     const a = await Promise.race([arenaReady, finished.then(() => null)])
     a?.setReveal(1, 2200)

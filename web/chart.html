@@ -3,12 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>runcandell</title>
+    <title>duelcandle · Chart</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect x='3' y='4' width='4' height='8' fill='%2326a69a'/><rect x='9' y='2' width='4' height='9' fill='%23f5a524'/></svg>" />
   </head>
   <body>
     <header class="topbar">
-      <a class="brand" href="/" title="Ke dashboard">runcandell</a>
+      <a class="brand" href="/" title="Ke dashboard">duelcandle</a>
       <div class="symbol" id="symbol">XAUUSD</div>
       <div class="tfs" id="tfs" role="group" aria-label="Timeframe"></div>
       <div class="ind-wrap">
@@ -41,30 +41,8 @@
     </header>
 
     <main class="workspace">
-      <nav class="tools" id="tools" aria-label="Alat gambar">
-        <button type="button" data-tool="cursor" title="Kursor (Esc)">
-          <svg viewBox="0 0 20 20"><path d="M5 3l10 6-4.5 1.2L13 15l-1.8.9-2.4-4.8L5 14z" /></svg>
-        </button>
-        <button type="button" data-tool="hline" title="Garis horizontal">
-          <svg viewBox="0 0 20 20"><path d="M2 10h16" /><circle cx="10" cy="10" r="1.8" /></svg>
-        </button>
-        <button type="button" data-tool="trend" title="Trendline">
-          <svg viewBox="0 0 20 20"><path d="M4 16L16 4" /><circle cx="4" cy="16" r="1.8" /><circle cx="16" cy="4" r="1.8" /></svg>
-        </button>
-        <button type="button" data-tool="rect" title="Zona (kotak)">
-          <svg viewBox="0 0 20 20"><rect x="3.5" y="5.5" width="13" height="9" /></svg>
-        </button>
-        <button type="button" data-tool="fib" title="Fibonacci retracement">
-          <svg viewBox="0 0 20 20"><path d="M3 4h14M3 8h14M3 12h14M3 16h14" /></svg>
-        </button>
-        <div class="tools-sep"></div>
-        <button type="button" id="delete-sel" title="Hapus gambar terpilih (Delete)">
-          <svg viewBox="0 0 20 20"><path d="M5 6h10M8 6V4h4v2M6.5 6l.8 10h5.4l.8-10" /></svg>
-        </button>
-        <button type="button" id="clear-all" title="Hapus semua gambar">
-          <svg viewBox="0 0 20 20"><path d="M4 4l12 12M16 4L4 16" /></svg>
-        </button>
-      </nav>
+      <!-- filled by src/drawtools.ts -->
+      <nav class="tools" id="tools" aria-label="Alat gambar"></nav>
 
       <section class="chart-wrap">
         <div class="legend-stack">
@@ -75,18 +53,19 @@
         <div class="pane-layer" id="pane-chips"></div>
         <div class="pick-line" id="pick-line" hidden></div>
         <div class="pick-bar" id="pick-bar" hidden>
-          <span>Klik candle untuk titik mulai replay</span>
+          <span><b>Pilih titik mulai:</b> klik candle. Candle sesudahnya disembunyikan.</span>
           <button type="button" data-p="random">Acak</button>
           <button type="button" data-p="cancel">Batal</button>
         </div>
         <div class="replay-bar" id="replay-bar" role="toolbar" aria-label="Kontrol replay" hidden>
           <button type="button" data-r="restart" title="Ulang dari titik awal" aria-label="Ulang dari titik awal">⏮</button>
           <button type="button" data-r="play" class="play">▶</button>
-          <button type="button" data-r="step" title="Maju 1 candle (Shift+→)" aria-label="Maju 1 candle">⏭</button>
+          <button type="button" data-r="step" title="Maju 1 candle (Shift+→)" aria-label="Maju 1 candle">⏭ <span class="rb-label">Maju 1</span></button>
           <select data-r="speed" aria-label="Kecepatan"></select>
           <span class="clock" data-r="clock"></span>
           <label class="hide-date" title="Sembunyikan tanggal"><input type="checkbox" data-r="hide" /> <span>Sembunyikan </span>tanggal</label>
           <span class="spacer"></span>
+          <button type="button" data-r="help" title="Cara pakai replay" aria-label="Cara pakai replay">?</button>
           <button type="button" data-r="save" title="Simpan sesi ke akun">Simpan</button>
           <button type="button" data-r="exit">Keluar replay</button>
         </div>

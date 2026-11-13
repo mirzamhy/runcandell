@@ -21,7 +21,9 @@ import { BacktestUI } from './backtest/ui'
 import { DuelUI, type DuelMarker } from './duel'
 import type { BtTrade } from './backtest/run'
 import { SeriesStore, TIMEFRAMES, dataSpan, loadManifest, type Bar, type Manifest, type TF } from './data'
-import { DrawingLayer, type Drawing, type Tool } from './drawings'
+import { openMenu, type MenuItem } from './ctxmenu'
+import { DrawingLayer, type Drawing } from './drawings'
+import { DrawTools, magnetLabel } from './drawtools'
 import { DEFAULT_CONFIG } from './engine/account'
 import { IndicatorManager } from './indicators/manager'
 import type { IndicatorConfig } from './indicators/registry'
@@ -205,12 +207,15 @@ const drawings = new DrawingLayer(
   {
     toLogical: (t) => (store ? store.indexOfTime(t) : 0),
     toTime: (l) => (store ? store.timeOfIndex(l) : 0),
+    // magnet: the candle as drawn (in replay the last one is still forming)
+    bar: (l) => shown[l] ?? null,
   },
   chartEl,
 )
 candles.attachPrimitive(drawings)
 drawings.load(load<Drawing[]>(KEY.drawings, []))
 drawings.onChange = () => save(KEY.drawings, drawings.drawings)
+const drawTools = new DrawTools($('tools'), chartWrap, drawings)
 
 const indicators = new IndicatorManager({ chart, candles }, $('chips'), $('pane-chips'), $<HTMLDialogElement>('ind-dialog'))
 indicators.onSave = (list) => save(KEY.indicators, list)
@@ -433,7 +438,7 @@ const duel = new DuelUI($<HTMLDialogElement>('duel-dialog'), duelBarEl, {
     duelMarkersApi.setMarkers([])
     setDuelUI(false)
     drawings.load(savedDrawings ?? [])
-    drawings.onChange = () => save(KEY.drawings, drawings.drawings)
+    drawTools.rebindChange(() => save(KEY.drawings, drawings.drawings))
     chart.applyOptions({})
     tf = savedTF
     syncTFButtons()
@@ -776,7 +781,32 @@ function updateClock() {
   clock.textContent = hideDate() ? formatWall(wall).slice(11) : formatWall(wall)
 }
 
+const HELP_KEY = 'rc.v1.replayHelpSeen'
+const replayHelp = document.createElement('div')
+replayHelp.className = 'replay-help'
+replayHelp.hidden = true
+replayHelp.innerHTML = `
+  <h3>Cara pakai replay</h3>
+  <ol>
+    <li><b>Putar</b> candle satu per satu dengan ▶ (<kbd>Spasi</kbd>) atau <b>Maju 1</b> (<kbd>Shift</kbd>+<kbd>→</kbd>). Atur kecepatan di sebelahnya.</li>
+    <li><b>Buka posisi</b> dengan SELL / BUY di panel order. Untuk order limit/stop: klik kanan chart di harga yang diinginkan.</li>
+    <li><b>SL dan TP</b>: tarik garis posisi di chart ke atas/bawah, atau klik garisnya lalu pilih Pasang SL/TP. Semua garis bisa digeser.</li>
+    <li><b>Selesai</b>: Simpan untuk lanjut nanti, Keluar replay untuk kembali ke chart biasa. Riwayat dan statistik ada di panel.</li>
+  </ol>
+  <button type="button" data-help="close">Mengerti</button>`
+chartWrap.append(replayHelp)
+replayHelp.addEventListener('click', (e) => {
+  if ((e.target as HTMLElement).closest('[data-help="close"]')) replayHelp.hidden = true
+})
+
+function showReplayHelp(force = false) {
+  if (!force && load<boolean>(HELP_KEY, false)) return
+  replayHelp.hidden = false
+  save(HELP_KEY, true)
+}
+
 function setReplayUI(on: boolean) {
+  if (!on) replayHelp.hidden = true
   document.body.classList.toggle('replay', on)
   replayBar.hidden = !on
   tradeEl.hidden = !on
@@ -789,7 +819,7 @@ function setReplayUI(on: boolean) {
 
 function syncPlayButton() {
   const b = replayBar.querySelector<HTMLButtonElement>('[data-r="play"]')!
-  b.textContent = playing ? '⏸' : '▶'
+  b.innerHTML = playing ? '⏸ <span class="rb-label">Jeda</span>' : '▶ <span class="rb-label">Putar</span>'
   b.setAttribute('aria-label', playing ? 'Jeda' : 'Putar')
   b.title = playing ? 'Jeda (Spasi)' : 'Putar (Spasi)'
 }
@@ -824,6 +854,7 @@ async function startReplay(t: number, session?: ReplaySession) {
     showLatest(Math.min(span, 200))
     saveSession(true)
   })
+  showReplayHelp()
 }
 
 async function exitReplay() {
@@ -945,6 +976,7 @@ function buildReplayControls() {
     if (act === 'restart' && confirm('Ulang dari titik awal? Posisi dan riwayat sesi ini dihapus.')) void startReplay(replay.startTime)
     if (act === 'exit') void exitReplay()
     if (act === 'save') void saveReplayToAccount()
+    if (act === 'help') replayHelp.hidden = !replayHelp.hidden
   })
   const speedSel = replayBar.querySelector<HTMLSelectElement>('[data-r="speed"]')!
   for (const s of [1, 2, 5, 10, 20]) speedSel.add(new Option(`${s}×/detik`, String(s), false, s === speed))
@@ -977,6 +1009,77 @@ function buildReplayControls() {
 }
 
 // ---------- controls ----------
+
+/** Right click on the chart: drawing actions, a line at this price, orders at this price in replay. */
+function buildContextMenu() {
+  chartWrap.addEventListener('contextmenu', (e) => {
+    const rect = chartEl.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    if (x < 0 || y < 0 || x > rect.width || y > chart.panes()[0].getHeight()) return
+    e.preventDefault()
+    const price = candles.coordinateToPrice(y)
+    const pt = drawings.pointAt(x, y)
+    const hit = drawings.hitAt(x, y)
+    const px = price === null ? '' : price.toFixed(2)
+    const items: MenuItem[] = []
+
+    if (hit) {
+      drawings.select(hit)
+      items.push(
+        { label: 'Duplikat gambar', hint: 'Ctrl+D', act: () => drawings.duplicate(hit) },
+        { label: 'Hapus gambar', hint: 'Del', danger: true, act: () => drawings.removeSelected() },
+        'sep',
+      )
+    }
+
+    const acc = replay ? trade.account : null
+    const q = acc?.quote()
+    if (acc && q && price !== null) {
+      const p = Math.round(price * 100) / 100
+      // below the market a buy waits as a limit and a sell as a stop; above it is the other way round
+      const below = p < q.bid
+      items.push(
+        { label: `${below ? 'Buy limit' : 'Sell limit'} di ${p.toFixed(2)}`, hint: 'isi tiket', act: () => trade.prefill('limit', p) },
+        { label: `${below ? 'Sell stop' : 'Buy stop'} di ${p.toFixed(2)}`, hint: 'isi tiket', act: () => trade.prefill('stop', p) },
+        'sep',
+      )
+    }
+
+    if (pt && price !== null) {
+      items.push(
+        { label: `Garis horizontal di ${px}`, act: () => drawings.addAt('hline', { t: pt.t, p: price }) },
+        { label: `Salin harga ${px}`, act: () => void navigator.clipboard?.writeText(px) },
+      )
+    }
+    if (!replay && !duelBars && !btOpen()) {
+      items.push({
+        label: 'Mulai replay dari candle ini',
+        act: () => {
+          const l = chart.timeScale().coordinateToLogical(x)
+          if (l === null) return
+          const bar = store.bars[Math.max(0, Math.min(Math.round(l), store.bars.length - 1))]
+          void startReplay(bar.time + store.tfSec - 1)
+        },
+      })
+    }
+    items.push(
+      'sep',
+      { label: magnetLabel(drawings.magnet), hint: 'ganti', act: () => drawTools.cycleMagnet() },
+      {
+        label: 'Reset skala chart',
+        act: () => {
+          chart.priceScale('right').applyOptions({ autoScale: true })
+          showLatest(currentSpan())
+        },
+      },
+    )
+    if (drawings.drawings.length) {
+      items.push({ label: 'Hapus semua gambar', danger: true, act: () => confirm('Hapus semua gambar di chart?') && drawings.clear() })
+    }
+    openMenu(e.clientX, e.clientY, items)
+  })
+}
 
 function syncTFButtons() {
   for (const b of tfsEl.querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.tf === tf))
@@ -1011,17 +1114,7 @@ function buildControls() {
 
   $('latest').addEventListener('click', () => void goLatest())
 
-  const toolButtons = [...document.querySelectorAll<HTMLButtonElement>('#tools [data-tool]')]
-  const syncTools = (t: Tool) => {
-    for (const b of toolButtons) b.setAttribute('aria-pressed', String(b.dataset.tool === t))
-  }
-  drawings.onToolChange = syncTools
-  for (const b of toolButtons) b.addEventListener('click', () => drawings.setTool(b.dataset.tool as Tool))
-  syncTools('cursor')
-  $('delete-sel').addEventListener('click', () => drawings.removeSelected())
-  $('clear-all').addEventListener('click', () => {
-    if (drawings.drawings.length && confirm('Hapus semua gambar di chart?')) drawings.clear()
-  })
+  buildContextMenu()
 
   chart.subscribeCrosshairMove((p) => {
     updateLegend(p)

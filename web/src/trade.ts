@@ -8,6 +8,7 @@ import {
   type SeriesMarker,
   type Time,
 } from 'lightweight-charts'
+import { openMenu, type MenuItem } from './ctxmenu'
 import { TradeError, stats, type Account, type AccountEvent, type PendingType, type Side, type ClosedTrade } from './engine/account'
 
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 })
@@ -37,28 +38,50 @@ export function toast(msg: string, kind: 'info' | 'good' | 'bad' = 'info') {
   setTimeout(() => el.remove(), 3200)
 }
 
-// ---------- order lines on the chart (draggable) ----------
+// ---------- order lines on the chart (draggable, MT5 style) ----------
 
-type LineKey = string // `${kind}:${id}` kind = entry|sl|tp|order
+/** `${kind}:${id}`; kinds: entry, sl, tp (positions), order, osl, otp (pending), tk (ticket preview), new (SL/TP being pulled out) */
+type LineKey = string
+type DragKind = 'entry' | 'sl' | 'tp' | 'order' | 'osl' | 'otp' | 'tk'
 
 interface DragState {
   key: LineKey
   id: number
-  kind: 'sl' | 'tp' | 'order'
-  pointerId: number
+  kind: DragKind
+  /** ticket preview field when kind = tk */
+  field?: 'price' | 'sl' | 'tp'
+  startY: number
+  moved: boolean
 }
+
+export interface TicketPreview {
+  price: number | null
+  sl: number | null
+  tp: number | null
+}
+
+const HIT_Y = 8
+const ARM_PX = 4
 
 class OrderLines {
   private lines = new Map<LineKey, IPriceLine>()
   private drag: DragState | null = null
+  private readonly chart: IChartApi
+  private readonly series: ISeriesApi<'Candlestick'>
+  private readonly host: HTMLElement
+  private readonly getAccount: () => Account | null
+  private readonly onModified: () => void
+  /** a click (no drag) on a position or order line */
+  onClick: (kind: 'entry' | 'order', id: number, clientX: number, clientY: number) => void = () => {}
+  getTicket: () => TicketPreview | null = () => null
+  setTicket: (field: 'price' | 'sl' | 'tp', v: number) => void = () => {}
 
-  constructor(
-    private readonly chart: IChartApi,
-    private readonly series: ISeriesApi<'Candlestick'>,
-    private readonly host: HTMLElement,
-    private readonly getAccount: () => Account | null,
-    private readonly onModified: () => void,
-  ) {
+  constructor(chart: IChartApi, series: ISeriesApi<'Candlestick'>, host: HTMLElement, getAccount: () => Account | null, onModified: () => void) {
+    this.chart = chart
+    this.series = series
+    this.host = host
+    this.getAccount = getAccount
+    this.onModified = onModified
     host.addEventListener('pointerdown', (e) => this.down(e), true)
     host.addEventListener('pointermove', (e) => this.move(e), true)
     host.addEventListener('pointerup', (e) => this.up(e), true)
@@ -78,7 +101,7 @@ class OrderLines {
         want.set(`entry:${p.id}`, {
           price: p.entry,
           color: COLORS[p.side],
-          lineWidth: 1,
+          lineWidth: 2,
           lineStyle: LineStyle.Solid,
           axisLabelVisible: true,
           title: `${p.side.toUpperCase()} ${p.lots.toFixed(2)}  ${fmtMoney(pnl, true)}`,
@@ -96,23 +119,33 @@ class OrderLines {
         want.set(`order:${o.id}`, {
           price: o.price,
           color: COLORS.pending,
-          lineWidth: 1,
+          lineWidth: 2,
           lineStyle: LineStyle.Dashed,
           axisLabelVisible: true,
           title: `${o.side.toUpperCase()} ${o.type.toUpperCase()} ${o.lots.toFixed(2)}`,
         })
-        if (o.sl !== null) want.set(`osl:${o.id}`, { price: o.sl, color: COLORS.sl, lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: 'SL' })
-        if (o.tp !== null) want.set(`otp:${o.id}`, { price: o.tp, color: COLORS.tp, lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: false, title: 'TP' })
+        if (o.sl !== null) want.set(`osl:${o.id}`, { price: o.sl, color: COLORS.sl, lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: true, title: 'SL order' })
+        if (o.tp !== null) want.set(`otp:${o.id}`, { price: o.tp, color: COLORS.tp, lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: true, title: 'TP order' })
+      }
+      // ticket preview: the pending price and SL/TP typed in the ticket, draggable before the order exists
+      const tk = this.getTicket()
+      const tkLine = (field: 'price' | 'sl' | 'tp', v: number | null, color: string, title: string) => {
+        if (v !== null && Number.isFinite(v)) want.set(`tk:${field}`, { price: v, color, lineWidth: 1, lineStyle: LineStyle.LargeDashed, axisLabelVisible: true, title })
+      }
+      if (tk) {
+        tkLine('price', tk.price, COLORS.pending, 'Harga order (geser)')
+        tkLine('sl', tk.sl, COLORS.sl, 'SL tiket (geser)')
+        tkLine('tp', tk.tp, COLORS.tp, 'TP tiket (geser)')
       }
     }
     for (const [k, l] of this.lines) {
-      if (!want.has(k)) {
+      if (!want.has(k) && !k.startsWith('new:')) {
         this.series.removePriceLine(l)
         this.lines.delete(k)
       }
     }
     for (const [k, opts] of want) {
-      if (this.drag?.key === k) continue // keep the price the user is dragging
+      if (this.drag?.key === k && this.drag.kind !== 'entry') continue // keep the price the user is dragging
       const l = this.lines.get(k)
       if (l) l.applyOptions(opts)
       else this.lines.set(k, this.series.createPriceLine(opts))
@@ -124,20 +157,23 @@ class OrderLines {
     return { x: e.clientX - r.left, y: e.clientY - r.top }
   }
 
-  private hit(x: number, y: number): DragState | null {
-    if (x > this.chart.timeScale().width() || y > this.chart.panes()[0].getHeight()) return null
+  private hit(x: number, y: number): Omit<DragState, 'startY' | 'moved'> | null {
+    // the price-axis label counts too: it is the easiest thing to grab
+    if (x > this.host.clientWidth || y > this.chart.panes()[0].getHeight()) return null
     let best: { key: LineKey; d: number } | null = null
     for (const [key, line] of this.lines) {
-      const kind = key.split(':')[0]
-      if (kind !== 'sl' && kind !== 'tp' && kind !== 'order') continue
+      if (key.startsWith('new:')) continue
       const ly = this.series.priceToCoordinate(line.options().price)
       if (ly === null) continue
       const d = Math.abs(ly - y)
-      if (d <= 5 && (!best || d < best.d)) best = { key, d }
+      // SL/TP can sit on the entry: prefer them
+      const bias = key.startsWith('entry:') ? 1.5 : 0
+      if (d <= HIT_Y && (!best || d + bias < best.d)) best = { key, d: d + bias }
     }
     if (!best) return null
     const [kind, id] = best.key.split(':')
-    return { key: best.key, id: Number(id), kind: kind as DragState['kind'], pointerId: 0 }
+    if (kind === 'tk') return { key: best.key, id: 0, kind: 'tk', field: id as DragState['field'] }
+    return { key: best.key, id: Number(id), kind: kind as DragKind }
   }
 
   private down(e: PointerEvent) {
@@ -147,22 +183,48 @@ class OrderLines {
     if (!h) return
     e.stopPropagation()
     e.preventDefault()
-    this.drag = { ...h, pointerId: e.pointerId }
+    this.drag = { ...h, startY: y, moved: false }
     this.host.setPointerCapture(e.pointerId)
     this.chart.applyOptions({ handleScroll: false, handleScale: false })
   }
 
   private move(e: PointerEvent) {
     const { x, y } = this.local(e)
-    if (!this.drag) {
+    const d = this.drag
+    if (!d) {
       const h = this.getAccount() ? this.hit(x, y) : null
       if (h) this.host.style.cursor = 'ns-resize'
       else if (this.host.style.cursor === 'ns-resize') this.host.style.cursor = ''
       return
     }
     e.stopPropagation()
-    const price = this.series.coordinateToPrice(y)
-    if (price !== null) this.lines.get(this.drag.key)?.applyOptions({ price: Math.round(price * 100) / 100 })
+    if (!d.moved && Math.abs(y - d.startY) < ARM_PX) return
+    d.moved = true
+    const raw = this.series.coordinateToPrice(y)
+    if (raw === null) return
+    const price = Math.round(raw * 100) / 100
+    const acc = this.getAccount()!
+    if (d.kind === 'entry') {
+      // pulling a position line out makes a TP (towards profit) or an SL (towards loss)
+      const p = acc.positions.find((q) => q.id === d.id)
+      if (!p) return
+      const pnl = acc.pnl(p.side, p.entry, price, p.lots)
+      const isTp = pnl > 0
+      const opts = { price, color: isTp ? COLORS.tp : COLORS.sl, lineWidth: 1 as const, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: `${isTp ? 'TP' : 'SL'} ${fmtMoney(pnl, true)}` }
+      const key = `new:${d.id}`
+      const l = this.lines.get(key)
+      if (l) l.applyOptions(opts)
+      else this.lines.set(key, this.series.createPriceLine(opts))
+      return
+    }
+    const line = this.lines.get(d.key)
+    if (!line) return
+    line.applyOptions({ price })
+    // live money label while dragging SL/TP
+    if (d.kind === 'sl' || d.kind === 'tp') {
+      const p = acc.positions.find((q) => q.id === d.id)
+      if (p) line.applyOptions({ title: `${d.kind.toUpperCase()} ${fmtMoney(acc.pnl(p.side, p.entry, price, p.lots), true)}` })
+    }
   }
 
   private up(e: PointerEvent) {
@@ -173,15 +235,29 @@ class OrderLines {
     if (this.host.hasPointerCapture(e.pointerId)) this.host.releasePointerCapture(e.pointerId)
     this.chart.applyOptions({ handleScroll: true, handleScale: true })
     const acc = this.getAccount()
-    const price = this.lines.get(d.key)?.options().price
-    if (!acc || price === undefined) return
+    if (!acc) return
+    if (!d.moved) {
+      if (d.kind === 'entry' || d.kind === 'order') this.onClick(d.kind, d.id, e.clientX, e.clientY)
+      return
+    }
+    const temp = this.lines.get(`new:${d.id}`)
+    const price = d.kind === 'entry' ? temp?.options().price : this.lines.get(d.key)?.options().price
+    if (temp) {
+      this.series.removePriceLine(temp)
+      this.lines.delete(`new:${d.id}`)
+    }
+    if (price === undefined) return
     try {
-      if (d.kind === 'order') {
+      if (d.kind === 'tk') this.setTicket(d.field!, price)
+      else if (d.kind === 'order' || d.kind === 'osl' || d.kind === 'otp') {
         const o = acc.orders.find((x) => x.id === d.id)
-        if (o) acc.modifyOrder(o.id, price, o.sl, o.tp)
+        if (o) acc.modifyOrder(o.id, d.kind === 'order' ? price : o.price, d.kind === 'osl' ? price : o.sl, d.kind === 'otp' ? price : o.tp)
       } else {
         const p = acc.positions.find((x) => x.id === d.id)
-        if (p) acc.modifyPosition(p.id, d.kind === 'sl' ? price : p.sl, d.kind === 'tp' ? price : p.tp)
+        if (p) {
+          const kind = d.kind === 'entry' ? (acc.pnl(p.side, p.entry, price, p.lots) > 0 ? 'tp' : 'sl') : d.kind
+          acc.modifyPosition(p.id, kind === 'sl' ? price : p.sl, kind === 'tp' ? price : p.tp)
+        }
       }
     } catch (err) {
       toast((err as Error).message, 'bad')
@@ -202,6 +278,8 @@ export interface TradeUIOptions {
   onChange: () => void
   /** trade journal (F5): button on finished trades */
   journal?: { has: (t: ClosedTrade) => boolean; open: (t: ClosedTrade) => void }
+  /** the panel changed size (folded / unfolded on small screens) */
+  onLayout?: () => void
 }
 
 export class TradeUI {
@@ -219,6 +297,95 @@ export class TradeUI {
     })
     this.markers = createSeriesMarkers(o.candles, [])
     this.build()
+    this.lines.onClick = (kind, id, x, y) => this.lineMenu(kind, id, x, y)
+    this.lines.getTicket = () => this.ticketPreview()
+    this.lines.setTicket = (field, v) => {
+      const input = (this.el.ticket as HTMLFormElement).elements.namedItem(field) as HTMLInputElement
+      input.value = v.toFixed(2)
+      this.updateRisk()
+      this.lines.sync()
+    }
+  }
+
+  /** Ticket values shown as draggable preview lines (pending price only for limit/stop). */
+  private ticketPreview() {
+    const form = this.el.ticket as HTMLFormElement | undefined
+    if (!form) return null
+    const pending = (form.elements.namedItem('type') as HTMLSelectElement).value !== 'market'
+    const v = (n: string) => {
+      const x = this.num(n)
+      return x === null || Number.isNaN(x) ? null : x
+    }
+    return { price: pending ? v('price') : null, sl: v('sl'), tp: v('tp') }
+  }
+
+  /** A sensible first distance for a new SL/TP: about a tenth of the visible chart height. */
+  private defaultDist(price: number) {
+    const y = this.o.candles.priceToCoordinate(price)
+    const h = this.o.chart.panes()[0].getHeight()
+    const other = y === null ? null : this.o.candles.coordinateToPrice(y + h * 0.1)
+    const d = other === null ? price * 0.002 : Math.abs(price - other)
+    return Math.max(0.5, Math.round(d * 100) / 100)
+  }
+
+  private addLevel(id: number, which: 'sl' | 'tp') {
+    const acc = this.account
+    const p = acc?.positions.find((x) => x.id === id)
+    if (!acc || !p) return
+    const d = this.defaultDist(p.entry)
+    const dir = (p.side === 'buy' ? 1 : -1) * (which === 'tp' ? 1 : -1)
+    const v = Math.round((p.entry + dir * d) * 100) / 100
+    this.act(() => acc.modifyPosition(id, which === 'sl' ? v : p.sl, which === 'tp' ? v : p.tp))
+    toast(`${which.toUpperCase()} dipasang di ${fmtPx(v)}. Geser garisnya di chart untuk mengatur.`)
+  }
+
+  private addOrderLevel(id: number, which: 'sl' | 'tp') {
+    const acc = this.account
+    const o = acc?.orders.find((x) => x.id === id)
+    if (!acc || !o) return
+    const d = this.defaultDist(o.price)
+    const dir = (o.side === 'buy' ? 1 : -1) * (which === 'tp' ? 1 : -1)
+    const v = Math.round((o.price + dir * d) * 100) / 100
+    this.act(() => acc.modifyOrder(id, o.price, which === 'sl' ? v : o.sl, which === 'tp' ? v : o.tp))
+  }
+
+  /** run an account change, report errors, refresh everything */
+  private act(fn: () => void) {
+    try {
+      fn()
+    } catch (err) {
+      toast((err as Error).message, 'bad')
+    }
+    this.structureSig = ''
+    this.refresh()
+    this.o.onChange()
+  }
+
+  /** Menu for a click on a position or order line in the chart. */
+  private lineMenu(kind: 'entry' | 'order', id: number, x: number, y: number) {
+    const acc = this.account
+    if (!acc) return
+    let items: MenuItem[] = []
+    if (kind === 'entry') {
+      const p = acc.positions.find((q) => q.id === id)
+      if (!p) return
+      items = [
+        p.sl === null ? { label: '+ Pasang SL', act: () => this.addLevel(id, 'sl') } : { label: 'Hapus SL', act: () => this.act(() => acc.modifyPosition(id, null, p.tp)) },
+        p.tp === null ? { label: '+ Pasang TP', act: () => this.addLevel(id, 'tp') } : { label: 'Hapus TP', act: () => this.act(() => acc.modifyPosition(id, p.sl, null)) },
+        'sep',
+        { label: `Tutup ${p.side.toUpperCase()} ${p.lots.toFixed(2)}`, hint: fmtMoney(acc.positionPnl(p), true), danger: true, act: () => this.act(() => acc.closePosition(id)) },
+      ]
+    } else {
+      const o = acc.orders.find((q) => q.id === id)
+      if (!o) return
+      items = [
+        o.sl === null ? { label: '+ Pasang SL', act: () => this.addOrderLevel(id, 'sl') } : { label: 'Hapus SL', act: () => this.act(() => acc.modifyOrder(id, o.price, null, o.tp)) },
+        o.tp === null ? { label: '+ Pasang TP', act: () => this.addOrderLevel(id, 'tp') } : { label: 'Hapus TP', act: () => this.act(() => acc.modifyOrder(id, o.price, o.sl, null)) },
+        'sep',
+        { label: 'Batalkan order', danger: true, act: () => this.act(() => acc.cancelOrder(id)) },
+      ]
+    }
+    openMenu(x, y, items)
   }
 
   /** Rebuild the lists on the next refresh (e.g. journal state changed). */
@@ -254,6 +421,12 @@ export class TradeUI {
   private build() {
     const r = this.o.root
     r.innerHTML = `
+      <div class="dock-head">
+        <button type="button" class="dock-toggle" data-f="dockToggle" aria-expanded="false">Order <span aria-hidden="true">▴</span></button>
+        <span class="dock-pl"><span class="k">P/L</span><b data-f="floating2"></b></span>
+        <button type="button" class="sell" data-side="sell">SELL <b data-f="bid2"></b></button>
+        <button type="button" class="buy" data-side="buy">BUY <b data-f="ask2"></b></button>
+      </div>
       <section class="acct">
         <div><span class="k">Saldo</span><b data-f="balance"></b></div>
         <div><span class="k">Equity</span><b data-f="equity"></b></div>
@@ -287,6 +460,8 @@ export class TradeUI {
         <canvas data-f="curve" height="64" aria-label="Kurva equity"></canvas>
       </section>`
     for (const el of r.querySelectorAll<HTMLElement>('[data-f]')) this.el[el.dataset.f!] = el
+    // small screens: the panel folds down to the dock head so the chart keeps the room
+    this.el.dockToggle.addEventListener('click', () => this.setDock(!r.classList.contains('open')))
 
     const form = this.el.ticket as HTMLFormElement
     const field = (n: string) => form.elements.namedItem(n) as HTMLInputElement
@@ -299,8 +474,12 @@ export class TradeUI {
         if (q) field('price').value = q.bid.toFixed(2)
       }
       this.updateRisk()
+      this.lines.sync()
     })
-    form.addEventListener('input', () => this.updateRisk())
+    form.addEventListener('input', () => {
+      this.updateRisk()
+      this.lines.sync()
+    })
     for (const b of r.querySelectorAll<HTMLButtonElement>('[data-side]')) {
       b.addEventListener('click', () => this.submit(b.dataset.side as Side))
     }
@@ -313,6 +492,24 @@ export class TradeUI {
     }
     this.el.body.addEventListener('click', (e) => this.onBodyClick(e))
     this.el.body.addEventListener('change', (e) => this.onBodyChange(e))
+  }
+
+  setDock(open: boolean) {
+    this.o.root.classList.toggle('open', open)
+    this.el.dockToggle.setAttribute('aria-expanded', String(open))
+    this.o.onLayout?.()
+  }
+
+  /** Fill the ticket with a pending order at `price` (from the chart's right-click menu). */
+  prefill(type: 'limit' | 'stop', price: number) {
+    const form = this.el.ticket as HTMLFormElement
+    const sel = form.elements.namedItem('type') as HTMLSelectElement
+    sel.value = type
+    sel.dispatchEvent(new Event('change'))
+    ;(form.elements.namedItem('price') as HTMLInputElement).value = price.toFixed(2)
+    this.setDock(true)
+    this.updateRisk()
+    ;(form.elements.namedItem('sl') as HTMLInputElement).focus()
   }
 
   private num(name: string): number | null {
@@ -394,6 +591,19 @@ export class TradeUI {
       if (tr) this.o.journal?.open(tr)
       return
     }
+    const act = t.dataset.act!
+    if (act === 'add-sl' || act === 'add-tp') return this.addLevel(id, act === 'add-sl' ? 'sl' : 'tp')
+    if (act === 'oadd-sl' || act === 'oadd-tp') return this.addOrderLevel(id, act === 'oadd-sl' ? 'sl' : 'tp')
+    if (act === 'clear-sl' || act === 'clear-tp') {
+      const p = acc.positions.find((x) => x.id === id)
+      if (p) this.act(() => acc.modifyPosition(id, act === 'clear-sl' ? null : p.sl, act === 'clear-tp' ? null : p.tp))
+      return
+    }
+    if (act === 'oclear-sl' || act === 'oclear-tp') {
+      const o = acc.orders.find((x) => x.id === id)
+      if (o) this.act(() => acc.modifyOrder(id, o.price, act === 'oclear-sl' ? null : o.sl, act === 'oclear-tp' ? null : o.tp))
+      return
+    }
     try {
       if (t.dataset.act === 'close') acc.closePosition(id)
       if (t.dataset.act === 'cancel') acc.cancelOrder(id)
@@ -408,6 +618,17 @@ export class TradeUI {
   private onBodyChange(e: Event) {
     const input = e.target as HTMLInputElement
     const acc = this.account
+    if (acc && input.dataset.oedit) {
+      const o = acc.orders.find((x) => x.id === Number(input.dataset.id))
+      const v = input.value.trim() === '' ? null : Number(input.value)
+      if (!o) return
+      return this.act(() => {
+        if (v !== null && !Number.isFinite(v)) throw new TradeError('Angka tidak valid.')
+        const f = input.dataset.oedit
+        if (f === 'price' && v === null) throw new TradeError('Isi harga order.')
+        acc.modifyOrder(o.id, f === 'price' ? v! : o.price, f === 'sl' ? v : o.sl, f === 'tp' ? v : o.tp)
+      })
+    }
     if (!acc || !input.dataset.edit) return
     const id = Number(input.dataset.id)
     const v = input.value.trim() === '' ? null : Number(input.value)
@@ -435,6 +656,10 @@ export class TradeUI {
     const fl = acc.floating()
     this.el.floating.textContent = fmtMoney(fl, true)
     this.el.floating.className = fl > 0 ? 'up' : fl < 0 ? 'down' : ''
+    this.el.floating2.textContent = fmtMoney(fl, true)
+    this.el.floating2.className = this.el.floating.className
+    this.el.bid2.textContent = q ? fmtPx(q.bid) : '–'
+    this.el.ask2.textContent = q ? fmtPx(q.ask) : '–'
     this.el.free.textContent = fmtMoney(acc.freeMargin())
     this.el.bid.textContent = q ? fmtPx(q.bid) : '–'
     this.el.ask.textContent = q ? fmtPx(q.ask) : '–'
@@ -462,7 +687,8 @@ export class TradeUI {
       if (cell) {
         const v = acc.positionPnl(p)
         cell.textContent = fmtMoney(v, true)
-        cell.className = v > 0 ? 'up' : v < 0 ? 'down' : ''
+        cell.classList.toggle('up', v > 0)
+        cell.classList.toggle('down', v < 0)
       }
     }
 
@@ -476,33 +702,37 @@ export class TradeUI {
   private renderBody() {
     const acc = this.account!
     let html = ''
+    // a level: value field with a clear button, or a "+" button that places it for dragging
+    const level = (kind: 'sl' | 'tp', v: number | null, id: number, order = false) =>
+      v === null
+        ? `<button type="button" class="lv-add ${kind}" data-act="${order ? 'o' : ''}add-${kind}" data-id="${id}">+ ${kind.toUpperCase()}</button>`
+        : `<span class="lv ${kind}"><span>${kind.toUpperCase()}</span><input aria-label="${kind === 'sl' ? 'Stop loss' : 'Take profit'}" type="number" step="0.01" inputmode="decimal" ${order ? 'data-oedit' : 'data-edit'}="${kind}" data-id="${id}" value="${v}"><button type="button" class="lv-x" data-act="${order ? 'o' : ''}clear-${kind}" data-id="${id}" aria-label="Hapus ${kind.toUpperCase()}">✕</button></span>`
     if (this.tab === 'pos') {
       html = acc.positions.length
-        ? `<table><thead><tr><th>Posisi</th><th>Entry</th><th>SL</th><th>TP</th><th>P/L</th><th></th></tr></thead><tbody>${acc.positions
+        ? `<ul class="cards">${acc.positions
             .map(
-              (p) => `<tr>
-                <td class="${p.side}">${p.side.toUpperCase()} ${p.lots.toFixed(2)}</td>
-                <td>${fmtPx(p.entry)}</td>
-                <td><input aria-label="Stop loss" type="number" step="0.01" data-edit="sl" data-id="${p.id}" value="${p.sl ?? ''}"></td>
-                <td><input aria-label="Take profit" type="number" step="0.01" data-edit="tp" data-id="${p.id}" value="${p.tp ?? ''}"></td>
-                <td data-pnl="${p.id}"></td>
-                <td><button type="button" class="x" data-act="close" data-id="${p.id}" aria-label="Tutup posisi">✕</button></td>
-              </tr>`,
+              (p) => `<li class="card-row">
+                <div class="cr-top"><b class="${p.side}">${p.side.toUpperCase()} ${p.lots.toFixed(2)}</b><span class="cr-at">@ ${fmtPx(p.entry)}</span><b class="cr-pnl" data-pnl="${p.id}"></b>
+                <button type="button" class="x" data-act="close" data-id="${p.id}" aria-label="Tutup posisi" title="Tutup posisi">✕</button></div>
+                <div class="cr-lv">${level('sl', p.sl, p.id)}${level('tp', p.tp, p.id)}</div>
+              </li>`,
             )
-            .join('')}</tbody></table><button type="button" class="link" data-act="close-all">Tutup semua</button>`
-        : '<p class="empty">Belum ada posisi. Pasang order dari tiket di atas.</p>'
+            .join('')}</ul>
+            <div class="cards-foot"><span class="hint">Tarik garis posisi di chart untuk membuat SL/TP. Klik garis untuk menu.</span>${acc.positions.length > 1 ? '<button type="button" class="link" data-act="close-all">Tutup semua</button>' : ''}</div>`
+        : '<p class="empty">Belum ada posisi. Klik SELL atau BUY di tiket.</p>'
     } else if (this.tab === 'orders') {
       html = acc.orders.length
-        ? `<table><thead><tr><th>Order</th><th>Harga</th><th>SL</th><th>TP</th><th></th></tr></thead><tbody>${acc.orders
+        ? `<ul class="cards">${acc.orders
             .map(
-              (o) => `<tr>
-                <td class="${o.side}">${o.side.toUpperCase()} ${o.type.toUpperCase()} ${o.lots.toFixed(2)}</td>
-                <td>${fmtPx(o.price)}</td><td>${fmtPx(o.sl)}</td><td>${fmtPx(o.tp)}</td>
-                <td><button type="button" class="x" data-act="cancel" data-id="${o.id}" aria-label="Batalkan order">✕</button></td>
-              </tr>`,
+              (o) => `<li class="card-row">
+                <div class="cr-top"><b class="${o.side}">${o.side.toUpperCase()} ${o.type.toUpperCase()} ${o.lots.toFixed(2)}</b>
+                <span class="lv price"><span>@</span><input aria-label="Harga order" type="number" step="0.01" inputmode="decimal" data-oedit="price" data-id="${o.id}" value="${o.price}"></span>
+                <button type="button" class="x" data-act="cancel" data-id="${o.id}" aria-label="Batalkan order" title="Batalkan order">✕</button></div>
+                <div class="cr-lv">${level('sl', o.sl, o.id, true)}${level('tp', o.tp, o.id, true)}</div>
+              </li>`,
             )
-            .join('')}</tbody></table>`
-        : '<p class="empty">Tidak ada order pending.</p>'
+            .join('')}</ul><div class="cards-foot"><span class="hint">Geser garis order di chart untuk ubah harga.</span></div>`
+        : '<p class="empty">Tidak ada order pending. Pilih tipe Limit/Stop di tiket, atau klik kanan chart di harga yang diinginkan.</p>'
     } else {
       const rows = acc.history.slice(-100).reverse()
       html = rows.length

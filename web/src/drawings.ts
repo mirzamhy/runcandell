@@ -10,8 +10,37 @@ import type {
   Time,
 } from 'lightweight-charts'
 
-export type DrawKind = 'hline' | 'trend' | 'rect' | 'fib'
+/** Drawing tools, roughly the everyday set of the TradingView toolbar. */
+export type DrawKind =
+  | 'trend'
+  | 'ray'
+  | 'extline'
+  | 'arrow'
+  | 'hline'
+  | 'hray'
+  | 'vline'
+  | 'cross'
+  | 'channel'
+  | 'fib'
+  | 'fibext'
+  | 'rect'
+  | 'ellipse'
+  | 'long'
+  | 'short'
+  | 'range'
+  | 'text'
 export type Tool = 'cursor' | DrawKind
+export type Dash = 'solid' | 'dash' | 'dot'
+export type Magnet = 'off' | 'weak' | 'strong'
+
+export interface DrawStyle {
+  color: string
+  /** line width in px, 1–4 */
+  width: number
+  dash: Dash
+  /** text tool content (and optional label) */
+  text?: string
+}
 
 /** A point in data space: t = UTC seconds (may be fractional / outside data), p = price. */
 export interface Pt {
@@ -23,25 +52,78 @@ export interface Drawing {
   id: string
   kind: DrawKind
   pts: Pt[]
+  /** missing on drawings saved before styles existed: defaults apply */
+  style?: DrawStyle
+}
+
+export interface OHLC {
+  open: number
+  high: number
+  low: number
+  close: number
 }
 
 /** Converts between data time and the chart's logical index for the current timeframe. */
 export interface Axis {
   toLogical(t: number): number
   toTime(l: number): number
+  /** candle at a whole logical index (magnet) */
+  bar?(l: number): OHLC | null
 }
 
-const NEED: Record<DrawKind, number> = { hline: 1, trend: 2, rect: 2, fib: 2 }
-const COLOR: Record<DrawKind, string> = {
-  hline: '#f5a524',
-  trend: '#4c8dff',
-  rect: '#a78bfa',
-  fib: '#2ec4b6',
+export const TOOL_LABEL: Record<Tool, string> = {
+  cursor: 'Kursor',
+  trend: 'Trendline',
+  ray: 'Ray',
+  extline: 'Garis diperpanjang',
+  arrow: 'Panah',
+  hline: 'Garis horizontal',
+  hray: 'Ray horizontal',
+  vline: 'Garis vertikal',
+  cross: 'Garis silang',
+  channel: 'Channel paralel',
+  fib: 'Fib retracement',
+  fibext: 'Fib extension',
+  rect: 'Kotak / zona',
+  ellipse: 'Elips',
+  long: 'Posisi long',
+  short: 'Posisi short',
+  range: 'Ukur harga & waktu',
+  text: 'Teks',
+}
+
+/** clicks needed to place each tool */
+const NEED: Record<DrawKind, number> = {
+  trend: 2, ray: 2, extline: 2, arrow: 2, hline: 1, hray: 1, vline: 1, cross: 1, channel: 3,
+  fib: 2, fibext: 3, rect: 2, ellipse: 2, long: 2, short: 2, range: 2, text: 1,
+}
+export const DEFAULT_STYLE: Record<DrawKind, DrawStyle> = {
+  trend: { color: '#4c8dff', width: 2, dash: 'solid' },
+  ray: { color: '#4c8dff', width: 2, dash: 'solid' },
+  extline: { color: '#4c8dff', width: 2, dash: 'solid' },
+  arrow: { color: '#f5a524', width: 2, dash: 'solid' },
+  hline: { color: '#f5a524', width: 1, dash: 'solid' },
+  hray: { color: '#f5a524', width: 1, dash: 'solid' },
+  vline: { color: '#9aa4b2', width: 1, dash: 'dash' },
+  cross: { color: '#9aa4b2', width: 1, dash: 'dash' },
+  channel: { color: '#a78bfa', width: 1, dash: 'solid' },
+  fib: { color: '#2ec4b6', width: 1, dash: 'solid' },
+  fibext: { color: '#2ec4b6', width: 1, dash: 'solid' },
+  rect: { color: '#a78bfa', width: 1, dash: 'solid' },
+  ellipse: { color: '#a78bfa', width: 1, dash: 'solid' },
+  long: { color: '#26a69a', width: 1, dash: 'solid' },
+  short: { color: '#ef5350', width: 1, dash: 'solid' },
+  range: { color: '#4c8dff', width: 1, dash: 'solid' },
+  text: { color: '#e6e9ef', width: 2, dash: 'solid', text: 'Teks' },
 }
 const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1]
+const FIBEXT_LEVELS = [0, 0.382, 0.618, 1, 1.272, 1.618, 2, 2.618]
 const HANDLE_R = 5
 const HIT_PX = 6
+const MAGNET_PX = 14
+const FAR = 1e5
 
+type XY = { x: number; y: number }
 type Hit = { id: string; handle: number | null }
 
 interface Drag {
@@ -56,8 +138,12 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
   drawings: Drawing[] = []
   selected: string | null = null
   tool: Tool = 'cursor'
+  magnet: Magnet = 'off'
+  /** remembered style per tool: new drawings start with the last style used */
+  styles: Partial<Record<DrawKind, DrawStyle>> = {}
   onChange: () => void = () => {}
   onToolChange: (t: Tool) => void = () => {}
+  onSelect: (d: Drawing | null) => void = () => {}
 
   private chart!: IChartApi
   private series!: ISeriesApi<'Candlestick'>
@@ -65,15 +151,17 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
   private draft: Drawing | null = null
   private drag: Drag | null = null
   private digits = 2
+  private ctrl = false
   private readonly view: IPrimitivePaneView
+  private readonly axis: Axis
+  private readonly host: HTMLElement
 
-  constructor(
-    private readonly axis: Axis,
-    private readonly host: HTMLElement,
-  ) {
+  constructor(axis: Axis, host: HTMLElement) {
+    this.axis = axis
+    this.host = host
     const renderer: IPrimitivePaneRenderer = {
       draw: (target: CanvasRenderingTarget2D) => {
-        target.useMediaCoordinateSpace(({ context, mediaSize }) => this.paint(context, mediaSize.width))
+        target.useMediaCoordinateSpace(({ context, mediaSize }) => this.paint(context, mediaSize.width, mediaSize.height))
       },
     }
     this.view = { zOrder: () => 'top', renderer: () => renderer }
@@ -108,21 +196,67 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
 
   load(list: Drawing[]) {
     this.drawings = list
-    this.selected = null
+    this.select(null)
+  }
+
+  styleOf(d: Drawing): DrawStyle {
+    return d.style ?? DEFAULT_STYLE[d.kind]
+  }
+
+  get selectedDrawing(): Drawing | null {
+    return this.drawings.find((d) => d.id === this.selected) ?? null
+  }
+
+  select(id: string | null) {
+    this.selected = id
+    this.onSelect(this.selectedDrawing)
     this.refresh()
+  }
+
+  /** Restyle the selected drawing; the new style becomes that tool's default. */
+  setStyle(patch: Partial<DrawStyle>) {
+    const d = this.selectedDrawing
+    if (!d) return
+    d.style = { ...this.styleOf(d), ...patch }
+    this.styles[d.kind] = { ...d.style, text: DEFAULT_STYLE[d.kind].text }
+    this.changed()
+  }
+
+  duplicate(id = this.selected) {
+    const d = this.drawings.find((x) => x.id === id)
+    if (!d) return
+    // shift the copy a little so it does not hide the original
+    const dl = 3
+    const copy: Drawing = {
+      id: crypto.randomUUID(),
+      kind: d.kind,
+      style: d.style ? { ...d.style } : undefined,
+      pts: d.pts.map((p) => ({ t: this.axis.toTime(this.axis.toLogical(p.t) + dl), p: p.p })),
+    }
+    this.drawings.push(copy)
+    this.select(copy.id)
+    this.changed()
+  }
+
+  /** Place a one-click drawing (right-click menu: horizontal line here). */
+  addAt(kind: DrawKind, pt: Pt) {
+    const d: Drawing = { id: crypto.randomUUID(), kind, pts: [pt], style: this.newStyle(kind) }
+    this.drawings.push(d)
+    this.select(d.id)
+    this.changed()
   }
 
   removeSelected() {
     if (!this.selected) return
     this.drawings = this.drawings.filter((d) => d.id !== this.selected)
-    this.selected = null
+    this.select(null)
     this.changed()
   }
 
   clear() {
     this.drawings = []
-    this.selected = null
     this.draft = null
+    this.select(null)
     this.changed()
   }
 
@@ -130,9 +264,23 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
     this.requestUpdate()
   }
 
+  /** Drawing id under a point in chart-element coordinates (right-click menu). */
+  hitAt(x: number, y: number): string | null {
+    return this.findHit(x, y)?.id ?? null
+  }
+
+  /** Data point under a point in chart-element coordinates, magnet applied. */
+  pointAt(x: number, y: number): Pt | null {
+    return this.toPt(x, y)
+  }
+
   private changed() {
     this.onChange()
     this.refresh()
+  }
+
+  private newStyle(kind: DrawKind): DrawStyle {
+    return { ...(this.styles[kind] ?? DEFAULT_STYLE[kind]), text: DEFAULT_STYLE[kind].text }
   }
 
   // ---- coordinates ----
@@ -154,10 +302,30 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
     return this.series.priceToCoordinate(p)
   }
 
-  private toPt(x: number, y: number): Pt | null {
+  /** Screen point to data point. Magnet snaps to the nearest open/high/low/close of the candle under the cursor. */
+  private toPt(x: number, y: number, snap = true): Pt | null {
     const l = this.chart.timeScale().coordinateToLogical(x)
     const p = this.series.coordinateToPrice(y)
     if (l === null || p === null) return null
+    const mode = this.ctrl ? (this.magnet === 'off' ? 'strong' : 'off') : this.magnet
+    if (snap && mode !== 'off' && this.axis.bar) {
+      const i = Math.round(l)
+      const b = this.axis.bar(i)
+      if (b) {
+        let best: number | null = null
+        let bestD = Infinity
+        for (const v of [b.open, b.high, b.low, b.close]) {
+          const vy = this.y(v)
+          if (vy === null) continue
+          const d = Math.abs(vy - y)
+          if (d < bestD) {
+            bestD = d
+            best = v
+          }
+        }
+        if (best !== null && (mode === 'strong' || bestD <= MAGNET_PX)) return { t: this.axis.toTime(i), p: best }
+      }
+    }
     return { t: this.axis.toTime(l), p }
   }
 
@@ -179,17 +347,24 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
     h.addEventListener('pointerdown', (e) => this.onDown(e), true)
     h.addEventListener('pointermove', (e) => this.onMove(e), true)
     h.addEventListener('pointerup', (e) => this.onUp(e), true)
+    const ctrl = (e: KeyboardEvent) => {
+      // hold Ctrl to flip the magnet while drawing (TradingView habit)
+      const on = e.ctrlKey || e.metaKey
+      if (on !== this.ctrl) this.ctrl = on
+    }
+    window.addEventListener('keyup', ctrl)
     window.addEventListener('keydown', (e) => {
+      ctrl(e)
       const tag = (e.target as HTMLElement | null)?.tagName
       if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return
       if (e.key === 'Escape') {
         if (this.draft || this.tool !== 'cursor') this.setTool('cursor')
-        else if (this.selected) {
-          this.selected = null
-          this.refresh()
-        }
+        else if (this.selected) this.select(null)
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         this.removeSelected()
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd' && this.selected) {
+        e.preventDefault()
+        this.duplicate()
       }
     })
   }
@@ -203,6 +378,7 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
     if (e.button !== 0) return
     const { x, y } = this.local(e)
     if (!this.inMainPane(y, x)) return
+    this.ctrl = e.ctrlKey || e.metaKey
     const pt = this.toPt(x, y)
     if (!pt) return
 
@@ -210,7 +386,7 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
       this.block(e)
       const kind = this.tool
       if (!this.draft) {
-        this.draft = { id: crypto.randomUUID(), kind, pts: [pt] }
+        this.draft = { id: crypto.randomUUID(), kind, pts: [pt], style: this.newStyle(kind) }
         if (NEED[kind] === 1) this.finishDraft()
         else this.draft.pts.push({ ...pt })
       } else {
@@ -224,23 +400,22 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
 
     const hit = this.findHit(x, y)
     if (!hit) {
-      if (this.selected) {
-        this.selected = null
-        this.refresh()
-      }
+      if (this.selected) this.select(null)
       return
     }
     this.block(e)
-    this.selected = hit.id
+    if (this.selected !== hit.id) this.select(hit.id)
     const d = this.drawings.find((dd) => dd.id === hit.id)!
     const l = this.chart.timeScale().coordinateToLogical(x) ?? 0
-    this.drag = { id: hit.id, handle: hit.handle, startL: l, startP: pt.p, orig: d.pts.map((p) => ({ ...p })) }
+    const p = this.series.coordinateToPrice(y) ?? pt.p
+    this.drag = { id: hit.id, handle: hit.handle, startL: l, startP: p, orig: d.pts.map((q) => ({ ...q })) }
     this.host.setPointerCapture(e.pointerId)
     this.refresh()
   }
 
   private onMove(e: PointerEvent) {
     const { x, y } = this.local(e)
+    this.ctrl = e.ctrlKey || e.metaKey
     if (this.draft) {
       const pt = this.toPt(x, y)
       if (pt) {
@@ -252,13 +427,21 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
     if (this.drag) {
       this.block(e)
       const d = this.drawings.find((dd) => dd.id === this.drag!.id)
-      const l = this.chart.timeScale().coordinateToLogical(x)
-      const p = this.series.coordinateToPrice(y)
-      if (!d || l === null || p === null) return
+      if (!d) return
       const g = this.drag
       if (g.handle !== null) {
-        d.pts[g.handle] = { t: this.axis.toTime(l), p }
+        const pt = this.toPt(x, y)
+        if (!pt) return
+        d.pts[g.handle] = pt
+        if (d.kind === 'long' || d.kind === 'short') {
+          // target and stop share the end time; the stop handle only moves the price
+          if (g.handle === 1) d.pts[2] = { t: pt.t, p: d.pts[2].p }
+          if (g.handle === 2) d.pts[2] = { t: d.pts[1].t, p: pt.p }
+        }
       } else {
+        const l = this.chart.timeScale().coordinateToLogical(x)
+        const p = this.series.coordinateToPrice(y)
+        if (l === null || p === null) return
         const dl = l - g.startL
         const dp = p - g.startP
         d.pts = g.orig.map((o) => ({ t: this.axis.toTime(this.axis.toLogical(o.t) + dl), p: o.p + dp }))
@@ -281,17 +464,27 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
   }
 
   private finishDraft() {
-    if (!this.draft) return
-    this.drawings.push(this.draft)
-    this.selected = this.draft.id
+    const d = this.draft
+    if (!d) return
+    if (d.kind === 'long' || d.kind === 'short') {
+      // second click = target; the stop starts at the mirror of the target (1:1)
+      const [a, b] = d.pts
+      const up = d.kind === 'long'
+      const target = up ? Math.max(b.p, a.p + Math.abs(b.p - a.p)) : Math.min(b.p, a.p - Math.abs(b.p - a.p))
+      const risk = Math.abs(target - a.p) || 1
+      const t = b.t > a.t ? b.t : this.axis.toTime(this.axis.toLogical(a.t) + 20)
+      d.pts = [a, { t, p: target }, { t, p: up ? a.p - risk : a.p + risk }]
+    }
+    this.drawings.push(d)
     this.draft = null
     this.setTool('cursor')
+    this.select(d.id)
     this.changed()
   }
 
-  // ---- hit testing ----
+  // ---- geometry ----
 
-  private screenPts(d: Drawing): { x: number; y: number }[] | null {
+  private screenPts(d: Drawing): XY[] | null {
     const out = []
     for (const p of d.pts) {
       const x = this.x(p.t)
@@ -302,75 +495,240 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
     return out
   }
 
+  /** the second rail of a parallel channel: the base line shifted to pass through point 3 */
+  private channelOffset(s: XY[]): number {
+    if (s.length < 3) return 0
+    const [a, b, c] = s
+    const k = b.x === a.x ? 0 : (c.x - a.x) / (b.x - a.x)
+    return c.y - (a.y + (b.y - a.y) * k)
+  }
+
+  /** Line segments that make up a drawing (hit testing for line-like tools). */
+  private segments(d: Drawing, s: XY[], w: number, h: number): [XY, XY][] {
+    const [a, b] = s
+    switch (d.kind) {
+      case 'trend':
+      case 'arrow':
+        return [[a, b]]
+      case 'ray':
+        return [[a, extend(a, b)]]
+      case 'extline':
+        return [[extend(b, a), extend(a, b)]]
+      case 'hline':
+        return [[{ x: 0, y: a.y }, { x: w, y: a.y }]]
+      case 'hray':
+        return [[a, { x: w, y: a.y }]]
+      case 'vline':
+        return [[{ x: a.x, y: 0 }, { x: a.x, y: h }]]
+      case 'cross':
+        return [
+          [{ x: 0, y: a.y }, { x: w, y: a.y }],
+          [{ x: a.x, y: 0 }, { x: a.x, y: h }],
+        ]
+      case 'channel': {
+        const off = this.channelOffset(s)
+        return [[a, b], [{ x: a.x, y: a.y + off }, { x: b.x, y: b.y + off }]]
+      }
+      default:
+        return []
+    }
+  }
+
+  // ---- hit testing ----
+
   private findHit(x: number, y: number): Hit | null {
+    const w = this.chart.timeScale().width()
+    const h = this.chart.panes()[0].getHeight()
     for (let i = this.drawings.length - 1; i >= 0; i--) {
       const d = this.drawings[i]
       const s = this.screenPts(d)
       if (!s) continue
-      if (d.kind !== 'hline') {
+      if (!['hline', 'vline', 'cross'].includes(d.kind)) {
         for (let k = 0; k < s.length; k++) {
           if (Math.hypot(s[k].x - x, s[k].y - y) <= HANDLE_R + 3) return { id: d.id, handle: k }
         }
       }
-      if (this.hitBody(d, s, x, y)) return { id: d.id, handle: null }
+      if (this.hitBody(d, s, x, y, w, h)) return { id: d.id, handle: null }
     }
     return null
   }
 
-  private hitBody(d: Drawing, s: { x: number; y: number }[], x: number, y: number): boolean {
+  private hitBody(d: Drawing, s: XY[], x: number, y: number, w: number, h: number): boolean {
+    const segs = this.segments(d, s, w, h)
+    if (segs.length) {
+      if (segs.some(([a, b]) => distToSegment(x, y, a, b) <= HIT_PX)) return true
+      if (d.kind !== 'channel') return false
+      const off = this.channelOffset(s)
+      return inPolygon(x, y, [s[0], s[1], { x: s[1].x, y: s[1].y + off }, { x: s[0].x, y: s[0].y + off }])
+    }
+    const box = (a: XY, b: XY) => {
+      const [x0, x1] = [Math.min(a.x, b.x), Math.max(a.x, b.x)]
+      const [y0, y1] = [Math.min(a.y, b.y), Math.max(a.y, b.y)]
+      return x >= x0 - HIT_PX && x <= x1 + HIT_PX && y >= y0 - HIT_PX && y <= y1 + HIT_PX
+    }
     switch (d.kind) {
-      case 'hline':
-        return Math.abs(s[0].y - y) <= HIT_PX
-      case 'trend':
-        return distToSegment(x, y, s[0], s[1]) <= HIT_PX
-      case 'rect': {
-        const [x0, x1] = [Math.min(s[0].x, s[1].x), Math.max(s[0].x, s[1].x)]
-        const [y0, y1] = [Math.min(s[0].y, s[1].y), Math.max(s[0].y, s[1].y)]
-        return x >= x0 - HIT_PX && x <= x1 + HIT_PX && y >= y0 - HIT_PX && y <= y1 + HIT_PX
+      case 'rect':
+      case 'range':
+        return box(s[0], s[1])
+      case 'ellipse': {
+        const cx = (s[0].x + s[1].x) / 2
+        const cy = (s[0].y + s[1].y) / 2
+        const rx = Math.abs(s[1].x - s[0].x) / 2 + HIT_PX
+        const ry = Math.abs(s[1].y - s[0].y) / 2 + HIT_PX
+        return ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 <= 1
       }
-      case 'fib': {
-        const [x0, x1] = [Math.min(s[0].x, s[1].x), Math.max(s[0].x, s[1].x)]
+      case 'long':
+      case 'short':
+        return box(s[0], s[1]) || box(s[0], { x: s[1].x, y: s[2]?.y ?? s[0].y })
+      case 'fib':
+      case 'fibext': {
+        const lv = this.fibLines(d, s)
+        if (!lv.length) return false
+        const [x0, x1] = [lv[0].x0, lv[0].x1]
         if (x < x0 - HIT_PX || x > x1 + HIT_PX) return false
-        return FIB_LEVELS.some((lv) => {
-          const py = this.y(fibPrice(d, lv))
-          return py !== null && Math.abs(py - y) <= HIT_PX
-        })
+        return lv.some((l) => Math.abs(l.y - y) <= HIT_PX)
+      }
+      case 'text': {
+        const m = this.textBox(d, s[0])
+        return x >= m.x - 4 && x <= m.x + m.w + 4 && y >= m.y - 4 && y <= m.y + m.h + 4
+      }
+      default:
+        return false
+    }
+  }
+
+  private textBox(d: Drawing, a: XY) {
+    const st = this.styleOf(d)
+    const size = 10 + st.width * 2
+    const lines = (st.text || ' ').split('\n')
+    // rough width without a context: ~0.6em per char
+    const w = Math.max(...lines.map((l) => l.length)) * size * 0.6
+    return { x: a.x, y: a.y - size, w, h: lines.length * size * 1.25, size, lines }
+  }
+
+  private fibLines(d: Drawing, s: XY[]) {
+    const out: { lv: number; price: number; y: number; x0: number; x1: number }[] = []
+    if (d.kind === 'fib') {
+      const x0 = Math.min(s[0].x, s[1].x)
+      const x1 = Math.max(s[0].x, s[1].x)
+      for (const lv of FIB_LEVELS) {
+        const price = d.pts[1].p + (d.pts[0].p - d.pts[1].p) * lv
+        const y = this.y(price)
+        if (y !== null) out.push({ lv, price, y, x0, x1 })
+      }
+    } else if (d.pts.length >= 3) {
+      const move = d.pts[1].p - d.pts[0].p
+      const x0 = s[2].x
+      const x1 = Math.max(s[1].x, s[2].x) + Math.max(60, Math.abs(s[2].x - s[1].x))
+      for (const lv of FIBEXT_LEVELS) {
+        const price = d.pts[2].p + move * lv
+        const y = this.y(price)
+        if (y !== null) out.push({ lv, price, y, x0, x1 })
       }
     }
+    return out
   }
 
   // ---- painting ----
 
-  private paint(ctx: CanvasRenderingContext2D, width: number) {
-    for (const d of this.drawings) this.paintOne(ctx, d, width, d.id === this.selected)
-    if (this.draft) this.paintOne(ctx, this.draft, width, true)
+  private paint(ctx: CanvasRenderingContext2D, width: number, height: number) {
+    for (const d of this.drawings) this.paintOne(ctx, d, width, height, d.id === this.selected)
+    if (this.draft) this.paintOne(ctx, this.draft, width, height, true)
   }
 
-  private paintOne(ctx: CanvasRenderingContext2D, d: Drawing, width: number, selected: boolean) {
+  private paintOne(ctx: CanvasRenderingContext2D, d: Drawing, width: number, height: number, selected: boolean) {
     const s = this.screenPts(d)
     if (!s) return
-    const color = COLOR[d.kind]
+    const st = this.styleOf(d)
+    const color = st.color
+    const px = (p: number) => p.toFixed(this.digits)
     ctx.save()
-    ctx.lineWidth = selected ? 2 : 1.5
+    ctx.lineWidth = st.width + (selected ? 0.5 : 0)
     ctx.strokeStyle = color
     ctx.fillStyle = color
+    ctx.setLineDash(st.dash === 'dash' ? [7, 4] : st.dash === 'dot' ? [2, 3] : [])
     ctx.font = '11px ui-sans-serif, system-ui, sans-serif'
+    const label = (text: string, x: number, y: number, bg = color, fg = '#0b0e14') => {
+      ctx.save()
+      ctx.setLineDash([])
+      const w = ctx.measureText(text).width + 10
+      ctx.fillStyle = bg
+      ctx.fillRect(x, y - 9, w, 18)
+      ctx.fillStyle = fg
+      ctx.textBaseline = 'middle'
+      ctx.fillText(text, x + 5, y)
+      ctx.restore()
+      return w
+    }
 
     switch (d.kind) {
-      case 'hline': {
+      case 'hline':
+      case 'hray': {
         const y = Math.round(s[0].y) + 0.5
+        line(ctx, d.kind === 'hline' ? 0 : s[0].x, y, width, y)
+        const t = px(d.pts[0].p)
+        label(t, width - ctx.measureText(t).width - 14, y)
+        break
+      }
+      case 'vline':
+        line(ctx, Math.round(s[0].x) + 0.5, 0, Math.round(s[0].x) + 0.5, height)
+        break
+      case 'cross': {
+        const y = Math.round(s[0].y) + 0.5
+        const x = Math.round(s[0].x) + 0.5
         line(ctx, 0, y, width, y)
-        const label = d.pts[0].p.toFixed(this.digits)
-        const w = ctx.measureText(label).width + 10
-        ctx.fillRect(width - w - 4, y - 9, w, 18)
-        ctx.fillStyle = '#0b0e14'
-        ctx.textBaseline = 'middle'
-        ctx.fillText(label, width - w + 1, y)
+        line(ctx, x, 0, x, height)
+        const t = px(d.pts[0].p)
+        label(t, width - ctx.measureText(t).width - 14, y)
         break
       }
       case 'trend':
         line(ctx, s[0].x, s[0].y, s[1].x, s[1].y)
         break
+      case 'ray': {
+        const e = extend(s[0], s[1])
+        line(ctx, s[0].x, s[0].y, e.x, e.y)
+        break
+      }
+      case 'extline': {
+        const a = extend(s[1], s[0])
+        const b = extend(s[0], s[1])
+        line(ctx, a.x, a.y, b.x, b.y)
+        break
+      }
+      case 'arrow': {
+        line(ctx, s[0].x, s[0].y, s[1].x, s[1].y)
+        const ang = Math.atan2(s[1].y - s[0].y, s[1].x - s[0].x)
+        const len = 8 + st.width * 3
+        ctx.setLineDash([])
+        ctx.beginPath()
+        ctx.moveTo(s[1].x, s[1].y)
+        ctx.lineTo(s[1].x - len * Math.cos(ang - 0.45), s[1].y - len * Math.sin(ang - 0.45))
+        ctx.lineTo(s[1].x - len * Math.cos(ang + 0.45), s[1].y - len * Math.sin(ang + 0.45))
+        ctx.closePath()
+        ctx.fill()
+        break
+      }
+      case 'channel': {
+        const [a, b] = s
+        line(ctx, a.x, a.y, b.x, b.y)
+        if (s.length >= 3) {
+          const off = this.channelOffset(s)
+          line(ctx, a.x, a.y + off, b.x, b.y + off)
+          ctx.globalAlpha = 0.1
+          ctx.beginPath()
+          ctx.moveTo(a.x, a.y)
+          ctx.lineTo(b.x, b.y)
+          ctx.lineTo(b.x, b.y + off)
+          ctx.lineTo(a.x, a.y + off)
+          ctx.closePath()
+          ctx.fill()
+          ctx.globalAlpha = 0.6
+          ctx.setLineDash([4, 4])
+          line(ctx, a.x, a.y + off / 2, b.x, b.y + off / 2)
+        }
+        break
+      }
       case 'rect': {
         const x0 = Math.min(s[0].x, s[1].x)
         const y0 = Math.min(s[0].y, s[1].y)
@@ -382,28 +740,77 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
         ctx.strokeRect(x0, y0, w, h)
         break
       }
-      case 'fib': {
-        const x0 = Math.min(s[0].x, s[1].x)
-        const x1 = Math.max(s[0].x, s[1].x)
+      case 'ellipse': {
+        const cx = (s[0].x + s[1].x) / 2
+        const cy = (s[0].y + s[1].y) / 2
+        ctx.beginPath()
+        ctx.ellipse(cx, cy, Math.abs(s[1].x - s[0].x) / 2, Math.abs(s[1].y - s[0].y) / 2, 0, 0, Math.PI * 2)
+        ctx.globalAlpha = 0.12
+        ctx.fill()
+        ctx.globalAlpha = 1
+        ctx.stroke()
+        break
+      }
+      case 'fib':
+      case 'fibext': {
+        ctx.save()
         ctx.setLineDash([4, 3])
         ctx.globalAlpha = 0.5
-        line(ctx, s[0].x, s[0].y, s[1].x, s[1].y)
-        ctx.setLineDash([])
-        ctx.globalAlpha = 1
+        ctx.beginPath()
+        ctx.moveTo(s[0].x, s[0].y)
+        for (const p of s.slice(1)) ctx.lineTo(p.x, p.y)
+        ctx.stroke()
+        ctx.restore()
         ctx.textBaseline = 'bottom'
-        for (const lv of FIB_LEVELS) {
-          const price = fibPrice(d, lv)
-          const y = this.y(price)
-          if (y === null) continue
-          const yy = Math.round(y) + 0.5
-          line(ctx, x0, yy, x1, yy)
-          ctx.fillText(`${lv} (${price.toFixed(this.digits)})`, x0 + 4, yy - 2)
+        for (const l of this.fibLines(d, s)) {
+          const yy = Math.round(l.y) + 0.5
+          line(ctx, l.x0, yy, l.x1, yy)
+          ctx.fillText(`${l.lv} (${px(l.price)})`, l.x0 + 4, yy - 2)
+        }
+        break
+      }
+      case 'long':
+      case 'short':
+        this.paintPosition(ctx, d, s, label)
+        break
+      case 'range': {
+        const [a, b] = s
+        const up = d.pts[1].p >= d.pts[0].p
+        ctx.fillStyle = up ? 'rgba(76,141,255,0.16)' : 'rgba(239,83,80,0.16)'
+        ctx.strokeStyle = up ? '#4c8dff' : '#ef5350'
+        ctx.fillRect(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.abs(b.x - a.x), Math.abs(b.y - a.y))
+        ctx.setLineDash([])
+        const mx = (a.x + b.x) / 2
+        const my = (a.y + b.y) / 2
+        arrowLine(ctx, mx, a.y, mx, b.y)
+        arrowLine(ctx, a.x, my, b.x, my)
+        const dp = d.pts[1].p - d.pts[0].p
+        const pct = (dp / d.pts[0].p) * 100
+        const bars = Math.round(this.axis.toLogical(d.pts[1].t) - this.axis.toLogical(d.pts[0].t))
+        const text = `${dp >= 0 ? '+' : ''}${px(dp)} (${pct.toFixed(2)}%) · ${bars} bar · ${fmtSpan(Math.abs(d.pts[1].t - d.pts[0].t))}`
+        const w = ctx.measureText(text).width + 10
+        label(text, mx - w / 2, Math.max(a.y, b.y) + 16, up ? '#4c8dff' : '#ef5350', '#fff')
+        break
+      }
+      case 'text': {
+        const m = this.textBox(d, s[0])
+        ctx.setLineDash([])
+        ctx.font = `600 ${m.size}px ui-sans-serif, system-ui, sans-serif`
+        ctx.textBaseline = 'top'
+        m.lines.forEach((l, i) => ctx.fillText(l, m.x, m.y + i * m.size * 1.25))
+        if (selected) {
+          ctx.globalAlpha = 0.5
+          ctx.setLineDash([3, 3])
+          ctx.lineWidth = 1
+          const w = Math.max(...m.lines.map((l) => ctx.measureText(l).width))
+          ctx.strokeRect(m.x - 4, m.y - 4, w + 8, m.h + 8)
         }
         break
       }
     }
 
-    if (selected && d.kind !== 'hline') {
+    if (selected && !['hline', 'vline', 'cross', 'text'].includes(d.kind)) {
+      ctx.setLineDash([])
       for (const p of s) {
         ctx.beginPath()
         ctx.arc(p.x, p.y, HANDLE_R, 0, Math.PI * 2)
@@ -416,12 +823,52 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
     }
     ctx.restore()
   }
+
+  /** Long/short position box: target zone, stop zone, prices and reward:risk. */
+  private paintPosition(ctx: CanvasRenderingContext2D, d: Drawing, s: XY[], label: (t: string, x: number, y: number, bg?: string, fg?: string) => number) {
+    const entry = d.pts[0].p
+    const target = d.pts[1].p
+    // while placing, the stop is the mirror of the target
+    const stop = d.pts[2]?.p ?? entry - (target - entry)
+    const ye = s[0].y
+    const yt = s[1].y
+    const ys = this.y(stop) ?? ye
+    const x0 = Math.min(s[0].x, s[1].x)
+    const x1 = Math.max(s[0].x, s[1].x, x0 + 40)
+    ctx.setLineDash([])
+    ctx.fillStyle = 'rgba(38,166,154,0.22)'
+    ctx.fillRect(x0, Math.min(ye, yt), x1 - x0, Math.abs(yt - ye))
+    ctx.fillStyle = 'rgba(239,83,80,0.22)'
+    ctx.fillRect(x0, Math.min(ye, ys), x1 - x0, Math.abs(ys - ye))
+    ctx.strokeStyle = '#9aa4b2'
+    ctx.lineWidth = 1
+    line(ctx, x0, ye, x1, ye)
+    const px = (p: number) => p.toFixed(this.digits)
+    const reward = Math.abs(target - entry)
+    const risk = Math.abs(entry - stop)
+    const pct = (v: number) => ((v / entry) * 100).toFixed(2)
+    const above = (a: number, b: number) => (a < b ? a - 12 : a + 12)
+    label(`Target ${px(target)} (${px(reward)}, ${pct(reward)}%)`, x0 + 4, above(yt, ye), '#26a69a', '#fff')
+    label(`Stop ${px(stop)} (${px(risk)}, ${pct(risk)}%)`, x0 + 4, above(ys, ye), '#ef5350', '#fff')
+    label(`${d.kind === 'long' ? 'Long' : 'Short'} ${px(entry)} · R:R ${risk ? (reward / risk).toFixed(2) : '–'}`, x0 + 4, ye, '#2a2f3a', '#e6e9ef')
+  }
 }
 
-/** Fib from point 0 (start) to point 1 (end): level 0 at the end, level 1 at the start (TradingView style). */
-function fibPrice(d: Drawing, lv: number): number {
-  const [a, b] = d.pts
-  return b.p + (a.p - b.p) * lv
+function fmtSpan(sec: number): string {
+  const d = Math.floor(sec / 86400)
+  const h = Math.floor((sec % 86400) / 3600)
+  const m = Math.round((sec % 3600) / 60)
+  if (d) return `${d}h ${h}j`
+  if (h) return `${h}j ${m}m`
+  return `${m}m`
+}
+
+/** point far along a→b (canvas clips it) */
+function extend(a: XY, b: XY): XY {
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  const len = Math.hypot(dx, dy) || 1
+  return { x: b.x + (dx / len) * FAR, y: b.y + (dy / len) * FAR }
 }
 
 function line(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number) {
@@ -431,10 +878,32 @@ function line(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number,
   ctx.stroke()
 }
 
-function distToSegment(px: number, py: number, a: { x: number; y: number }, b: { x: number; y: number }) {
+function arrowLine(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number) {
+  if (Math.hypot(x1 - x0, y1 - y0) < 12) return
+  line(ctx, x0, y0, x1, y1)
+  const ang = Math.atan2(y1 - y0, x1 - x0)
+  ctx.beginPath()
+  ctx.moveTo(x1, y1)
+  ctx.lineTo(x1 - 7 * Math.cos(ang - 0.5), y1 - 7 * Math.sin(ang - 0.5))
+  ctx.moveTo(x1, y1)
+  ctx.lineTo(x1 - 7 * Math.cos(ang + 0.5), y1 - 7 * Math.sin(ang + 0.5))
+  ctx.stroke()
+}
+
+function distToSegment(px: number, py: number, a: XY, b: XY) {
   const dx = b.x - a.x
   const dy = b.y - a.y
   const len2 = dx * dx + dy * dy
   const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((px - a.x) * dx + (py - a.y) * dy) / len2))
   return Math.hypot(px - (a.x + t * dx), py - (a.y + t * dy))
+}
+
+function inPolygon(x: number, y: number, poly: XY[]) {
+  let inside = false
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i]
+    const b = poly[j]
+    if (a.y > y !== b.y > y && x < ((b.x - a.x) * (y - a.y)) / (b.y - a.y) + a.x) inside = !inside
+  }
+  return inside
 }

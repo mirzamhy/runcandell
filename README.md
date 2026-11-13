@@ -15,6 +15,12 @@ Halaman:
 - `/` arena: intro pertama kali (mata muncul dari gelap, WELCOME, topeng 3D dengan api ungu), landing page dengan form buat akun di dalamnya (nickname → kode pemulihan), lalu dashboard: mulai/gabung duel, duel yang belum selesai, rekor kamu, leaderboard total R 7 hari, menu Materi (terkunci). Topeng 3D (three.js, dimuat belakangan) mengikuti layout; tanpa WebGL pakai logo SVG.
 - `/chart.html` chart lengkap (bisa tanpa akun). `?open=duel` membuka dialog duel, `?duel=KODE` langsung ke duel. Link lama `/?duel=KODE` dialihkan ke sini.
 
+Nama tampil aplikasi: **duelcandle**.
+
+Alat gambar (toolbar kiri, grup dengan daftar alat): trendline, ray, garis diperpanjang, panah, garis/ray horizontal, garis vertikal, garis silang, channel paralel, Fib retracement/extension, kotak, elips, posisi long/short (target, stop, R:R), ukur harga & waktu, teks. Pilih gambar untuk ganti warna, tebal, jenis garis, duplikat (Ctrl+D), hapus. Magnet (lemah/kuat) menempel ke open/high/low/close; tahan Ctrl untuk membalik. Klik kanan chart: garis horizontal di harga itu, salin harga, mulai replay dari candle itu, order limit/stop di harga itu (saat replay), reset skala.
+
+Trading di replay ala MT5: tarik garis posisi ke arah untung untuk TP atau ke arah rugi untuk SL, geser garis SL/TP/order, klik garis untuk menu. Di layar kecil panel order dilipat jadi baris ringkas (P/L, SELL, BUY).
+
 Fitur chart: candlestick + panel volume, timeframe M1–D1, zona waktu (UTC/WIB/London/New York), lompat ke tanggal, tombol ke candle terbaru, legend OHLC/volume/spread, data dimuat per file saat chart digeser. Alat gambar: garis horizontal, trendline, zona, Fibonacci; bisa dipilih, digeser, dihapus (Delete), tersimpan di browser.
 
 Indikator (F2), lewat tombol **Indikator**:
