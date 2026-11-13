@@ -1,0 +1,20 @@
+# market data: regenerate with tools/export_mt5.py + tools/build_data.py
+data/
+
+# local agent notes
+CLAUDE.md
+
+# python
+__pycache__/
+*.pyc
+.venv/
+
+# node
+node_modules/
+dist/
+
+# os / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
