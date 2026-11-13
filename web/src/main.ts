@@ -3,6 +3,7 @@ import {
   ColorType,
   CrosshairMode,
   HistogramSeries,
+  LineStyle,
   createChart,
   type CandlestickData,
   type HistogramData,
@@ -44,6 +45,14 @@ const chartEl = $('chart')
 const legendEl = $('legend')
 const overlayEl = $('overlay')
 const statusEl = $('status')
+const statusInfo = document.createElement('span')
+const attribution = document.createElement('a')
+attribution.href = 'https://www.tradingview.com/'
+attribution.target = '_blank'
+attribution.rel = 'noopener'
+attribution.textContent = 'Chart: TradingView Lightweight Charts™'
+attribution.className = 'attribution'
+statusEl.append(statusInfo, attribution)
 const tfsEl = $('tfs')
 const zoneEl = $<HTMLSelectElement>('zone')
 const gotoForm = $<HTMLFormElement>('goto')
@@ -61,6 +70,8 @@ const chart = createChart(chartEl, {
     textColor: color('--muted'),
     fontFamily: "ui-sans-serif, system-ui, 'Segoe UI', sans-serif",
     panes: { separatorColor: color('--border') },
+    // Logo hidden; TradingView attribution is in the status bar instead (Apache-2.0 NOTICE).
+    attributionLogo: false,
   },
   grid: {
     vertLines: { color: '#141924' },
@@ -78,6 +89,28 @@ const candles = chart.addSeries(CandlestickSeries, {
   wickDownColor: color('--down'),
   borderVisible: false,
   priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
+  // replaced by explicit Bid/Ask lines below
+  priceLineVisible: false,
+  lastValueVisible: false,
+})
+
+// MT5 candles are Bid prices; Ask = Bid + spread.
+const ASK_COLOR = '#4c8dff'
+const bidLine = candles.createPriceLine({
+  price: 0,
+  color: color('--up'),
+  lineWidth: 1,
+  lineStyle: LineStyle.Dashed,
+  axisLabelVisible: true,
+  title: 'Bid',
+})
+const askLine = candles.createPriceLine({
+  price: 0,
+  color: ASK_COLOR,
+  lineWidth: 1,
+  lineStyle: LineStyle.Dashed,
+  axisLabelVisible: true,
+  title: 'Ask',
 })
 
 const volume = chart.addSeries(
@@ -132,12 +165,31 @@ function render() {
   }
   candles.setData(c)
   volume.setData(v)
+  updateQuoteLines()
   drawings.refresh()
   updateLegend()
   updateStatus()
 }
 
 const fmt = (n: number) => n.toFixed(2)
+
+/** Bid/Ask lines only make sense at the newest bar; hide them while viewing an older window. */
+function updateQuoteLines() {
+  const last = store.bars[store.bars.length - 1]
+  const show = store.atLatest && !!last
+  const bidColor = last && last.close >= last.open ? color('--up') : color('--down')
+  bidLine.applyOptions({
+    price: last?.close ?? 0,
+    color: bidColor,
+    lineVisible: show,
+    axisLabelVisible: show,
+  })
+  askLine.applyOptions({
+    price: last ? last.close + last.spread : 0,
+    lineVisible: show,
+    axisLabelVisible: show,
+  })
+}
 
 function updateLegend(param?: MouseEventParams<Time>) {
   if (!store?.bars.length) {
@@ -159,6 +211,7 @@ function updateLegend(param?: MouseEventParams<Time>) {
     `<span><span class="k">H</span>${fmt(b.high)}</span>`,
     `<span><span class="k">L</span>${fmt(b.low)}</span>`,
     `<span><span class="k">C</span><span class="${cls}">${fmt(b.close)}</span></span>`,
+    `<span><span class="k">Ask</span><span class="ask">${fmt(b.close + b.spread)}</span></span>`,
     `<span class="${cls}">${chg >= 0 ? '+' : ''}${fmt(chg)} (${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%)</span>`,
     `<span><span class="k">Vol</span>${b.volume.toLocaleString('id-ID')}</span>`,
     `<span><span class="k">Spread</span>${fmt(b.spread)}</span>`,
@@ -171,9 +224,10 @@ function updateStatus() {
   const from = formatWall(shift(m1[0].from), false)
   const to = formatWall(shift(m1[m1.length - 1].to), false)
   const zoneLabel = ZONES.find((z) => z.id === zone)?.label ?? zone
-  statusEl.textContent =
+  statusInfo.textContent =
     `Data ${from} → ${to} · ${total.toLocaleString('id-ID')} candle M1 · ` +
-    `dimuat ${store.bars.length.toLocaleString('id-ID')} candle ${tf} · zona ${tf === 'D1' ? 'hari trading NY 17:00' : zoneLabel}`
+    `dimuat ${store.bars.length.toLocaleString('id-ID')} candle ${tf} · zona ${tf === 'D1' ? 'hari trading NY 17:00' : zoneLabel} · ` +
+    `harga candle = Bid, Ask = Bid + spread`
 }
 
 function showOverlay(html: string | null) {
