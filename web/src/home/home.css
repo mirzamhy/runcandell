@@ -39,24 +39,68 @@ body[data-view='dash'] .view-dash { display: grid; }
 
 /* ---------- intro ---------- */
 body.intro { overflow: hidden; }
-body.intro .veil { opacity: 1; }
+body.intro .veil { opacity: 1; transition: none; }
 .view-login { transition: opacity 1.2s ease 0.2s; }
 body.intro .view-login { opacity: 0; pointer-events: none; }
 .intro { position: fixed; inset: 0; z-index: 4; display: grid; place-items: center; pointer-events: none; }
 .intro-eyes { position: absolute; left: 50%; top: 40%; width: min(52vw, 280px); aspect-ratio: 120 / 44; transform: translate(-50%, -50%); opacity: 0; }
-.intro-eyes svg { width: 100%; height: 100%; stroke: none; fill: #eef6ff; filter: drop-shadow(0 0 6px #6f9bff) drop-shadow(0 0 22px var(--sapphire)) drop-shadow(0 0 60px rgba(64, 95, 250, 0.7)); transform-origin: 50% 60%; }
-.intro-eyes.on { animation: eyes-in 1.6s ease-out forwards; }
-.intro-eyes.on svg { animation: blink 2.6s ease-in-out 1.1s; }
+.intro-eyes.on { opacity: 1; }
+.intro-eyes svg { width: 100%; height: 100%; overflow: visible; stroke: none; fill: #eef6ff; filter: drop-shadow(0 0 6px #6f9bff) drop-shadow(0 0 22px var(--sapphire)) drop-shadow(0 0 60px rgba(64, 95, 250, 0.7)); }
+/* each eye: a dot of light, stretches into a slit, then opens; later blinks */
+.intro-eyes path { transform-box: fill-box; transform-origin: 50% 55%; transform: scale(0.015, 0.03); opacity: 0; }
+.intro-eyes.on path { animation: eye-open 2.4s cubic-bezier(0.6, 0, 0.2, 1) forwards, eye-blink 1.8s ease-in-out 2.7s; }
+.intro-eyes.on path + path { animation-delay: 0.08s, 2.7s; }
 .intro-welcome { position: absolute; left: 50%; top: calc(40% + min(13vw, 72px)); transform: translateX(-50%); padding-left: 0.6em; white-space: nowrap;
   font: 600 clamp(14px, 2.4vw, 20px) 'Unbounded', sans-serif; letter-spacing: 0.6em; color: #b9c6ff; text-shadow: 0 0 22px rgba(64, 95, 250, 0.9); opacity: 0; }
-.intro-welcome.on { animation: welcome-in 1.4s ease-out forwards; }
+.intro-welcome.on { opacity: 1; }
+.glitch { position: relative; display: inline-block; }
+.intro-welcome.on .glitch { animation: flicker-in 1s steps(1) both, jitter 2.4s steps(1) 1s infinite; }
+.glitch::before, .glitch::after { content: attr(data-text); position: absolute; inset: 0; mix-blend-mode: screen; clip-path: inset(0 0 100% 0); text-shadow: none; }
+.glitch::before { color: #a86bff; }
+.glitch::after { color: #2fe4f0; }
+.intro-welcome.on .glitch::before { animation: slice-a 2.4s steps(1) 0.4s infinite; }
+.intro-welcome.on .glitch::after { animation: slice-b 2.4s steps(1) 0.4s infinite; }
 .intro-eyes.out, .intro-welcome.out { animation: fade-out 0.9s ease-in forwards; }
 .intro-slot { position: absolute; left: 50%; top: 50%; height: min(62vh, 520px, 100vw); aspect-ratio: 200 / 262; transform: translate(-50%, -50%); }
 .intro-skip { position: absolute; right: 20px; bottom: 20px; pointer-events: auto; padding: 8px 14px; border-radius: 999px; font-size: 13px; color: var(--muted); border: 1px solid rgba(217, 252, 237, 0.15); }
 .intro-skip:hover { color: var(--text); }
-@keyframes eyes-in { from { opacity: 0; filter: blur(14px); transform: translate(-50%, -50%) scale(0.92); } to { opacity: 1; filter: blur(0); transform: translate(-50%, -50%) scale(1); } }
-@keyframes blink { 0%, 30%, 100% { transform: scaleY(1); } 34% { transform: scaleY(0.06); } 38% { transform: scaleY(1); } 62% { transform: scaleY(1); } 65% { transform: scaleY(0.06); } 67% { transform: scaleY(1); } 70% { transform: scaleY(0.06); } 74% { transform: scaleY(1); } }
-@keyframes welcome-in { from { opacity: 0; letter-spacing: 1.2em; } to { opacity: 1; letter-spacing: 0.6em; } }
+@keyframes eye-open {
+  0% { opacity: 0; transform: scale(0.015, 0.03); }
+  12%, 24% { opacity: 1; transform: scale(0.035, 0.06); }
+  58%, 68% { opacity: 1; transform: scale(1, 0.05); }
+  100% { opacity: 1; transform: scale(1, 1); }
+}
+@keyframes eye-blink {
+  0%, 100% { transform: scale(1, 1); }
+  14% { transform: scale(1, 0.05); }
+  26% { transform: scale(1, 1); }
+  62% { transform: scale(1, 1); }
+  70% { transform: scale(1, 0.45); }
+  78% { transform: scale(1, 1); }
+}
+@keyframes flicker-in { 0% { opacity: 0; } 8% { opacity: 1; } 14% { opacity: 0; } 24% { opacity: 1; } 30% { opacity: 0.15; } 44% { opacity: 1; } 50% { opacity: 0.4; } 58%, 100% { opacity: 1; } }
+@keyframes jitter {
+  0%, 56%, 66%, 86%, 92%, 100% { transform: none; }
+  58% { transform: translate(-3px, 1px) skewX(-10deg); }
+  61% { transform: translate(4px, -1px); }
+  63% { transform: translate(-1px, 0) skewX(6deg); }
+  88% { transform: translate(2px, 0); }
+  90% { transform: translate(-2px, 1px); }
+}
+@keyframes slice-a {
+  0%, 56%, 66%, 86%, 92%, 100% { clip-path: inset(0 0 100% 0); transform: none; }
+  58% { clip-path: inset(8% 0 58% 0); transform: translate(-7px, 0); }
+  61% { clip-path: inset(62% 0 6% 0); transform: translate(6px, 0); }
+  63% { clip-path: inset(30% 0 40% 0); transform: translate(-3px, 0); }
+  88% { clip-path: inset(44% 0 30% 0); transform: translate(-5px, 0); }
+}
+@keyframes slice-b {
+  0%, 56%, 66%, 86%, 92%, 100% { clip-path: inset(0 0 100% 0); transform: none; }
+  58% { clip-path: inset(55% 0 12% 0); transform: translate(7px, 0); }
+  61% { clip-path: inset(4% 0 70% 0); transform: translate(-6px, 0); }
+  63% { clip-path: inset(70% 0 2% 0); transform: translate(4px, 0); }
+  89% { clip-path: inset(10% 0 62% 0); transform: translate(5px, 0); }
+}
 @keyframes fade-out { to { opacity: 0; } }
 body[data-view='loading'] .arena-canvas { opacity: 0; }
 .arena-canvas { transition: opacity 0.6s; }

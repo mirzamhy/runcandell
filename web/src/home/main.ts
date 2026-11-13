@@ -82,10 +82,10 @@ async function playIntro() {
   })
 
   await step(500)
-  if (!skipped) eyes.classList.add('on')
-  await step(1500)
-  if (!skipped) welcome.classList.add('on')
-  await step(2300)
+  if (!skipped) eyes.classList.add('on') // dot, slit, open: ~2.5 s
+  await step(2500)
+  if (!skipped) welcome.classList.add('on') // flickers on, then glitches
+  await step(2600)
   if (!skipped) {
     eyes.classList.add('out')
     welcome.classList.add('out')
@@ -93,7 +93,7 @@ async function playIntro() {
     const a = await Promise.race([arenaReady, finished.then(() => null)])
     a?.setReveal(1, 2200)
   }
-  await step(3200)
+  await step(3000)
 
   // landing: lift the veil, mask glides into the hero, then starts to breathe
   try {
