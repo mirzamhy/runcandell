@@ -11,43 +11,89 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Unbounded:wght@600;800&display=swap" rel="stylesheet" />
   </head>
   <body class="arena-page" data-view="loading">
+    <div class="veil" aria-hidden="true"></div>
     <canvas id="arena3d" class="arena-canvas" aria-hidden="true"></canvas>
 
-    <!-- ============ LOGIN ============ -->
+    <!-- ============ INTRO (first visit, logged out) ============ -->
+    <div class="intro" id="intro" hidden>
+      <div class="intro-eyes" id="intro-eyes"></div>
+      <p class="intro-welcome" id="intro-welcome">WELCOME</p>
+      <div class="intro-slot" id="intro-slot"></div>
+      <button type="button" class="intro-skip" id="intro-skip">Lewati intro</button>
+    </div>
+
+    <!-- ============ LANDING + SIGN UP ============ -->
     <main class="view view-login">
-      <a class="brand" href="/"><span class="logo"></span>runcandell</a>
-      <section class="hero">
-        <span class="sigil"></span>
-        <p class="welcome">WELCOME</p>
-        <div class="mask-slot" id="slot-login"><span class="mask-fallback"></span></div>
-        <h1 class="arena">TO ARENA</h1>
+      <header class="topnav">
+        <a class="brand" href="/"><span class="logo"></span>runcandell</a>
+        <nav>
+          <a href="#fitur">Fitur</a>
+          <a href="#cara">Cara main</a>
+          <a class="btn ghost sm" href="#daftar">Buat akun</a>
+        </nav>
+      </header>
+
+      <section class="landing-top">
+        <div class="hero">
+          <span class="sigil"></span>
+          <p class="welcome">WELCOME</p>
+          <div class="mask-slot" id="slot-login"><span class="mask-fallback"></span></div>
+          <h1 class="arena">TO ARENA</h1>
+          <p class="tagline">Belajar baca chart emas lewat duel. Potongan chart XAUUSD asli, satu keputusan, skor dalam R.</p>
+        </div>
+
+        <section class="card" id="daftar">
+          <form id="guest-form" class="stack">
+            <h2>Buat akun</h2>
+            <p>Gratis. Cukup nickname, tanpa email dan password.</p>
+            <label>Nickname<input name="nickname" autocomplete="nickname" placeholder="contoh: goldhunter" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]{3,20}" required /></label>
+            <small class="hint">3–20 karakter: huruf, angka, _</small>
+            <button class="btn primary" type="submit">Buat akun &amp; masuk arena</button>
+            <button class="btn ghost" type="button" data-to="recover">Sudah punya akun? Pakai kode pemulihan</button>
+          </form>
+          <form id="recover-form" class="stack" hidden>
+            <h2>Masuk lagi</h2>
+            <p>Tempel kode pemulihan yang kamu simpan waktu buat akun.</p>
+            <label>Kode pemulihan<input name="code" autocomplete="off" spellcheck="false" placeholder="rc-…" required /></label>
+            <button class="btn primary" type="submit">Masuk</button>
+            <button class="btn ghost" type="button" data-to="guest">Belum punya akun? Buat baru</button>
+          </form>
+          <div id="code-box" class="stack" hidden>
+            <h2>Simpan kode ini</h2>
+            <p>Ini satu-satunya cara masuk lagi dari perangkat lain. Kode cuma tampil sekali.</p>
+            <code class="code" id="code-value"></code>
+            <button class="btn ghost" type="button" id="code-copy">Salin kode</button>
+            <button class="btn primary" type="button" id="code-done">Sudah saya simpan, masuk</button>
+          </div>
+          <p class="err" id="login-err" role="alert" hidden></p>
+          <a class="skip" href="/chart.html">Lihat chart dulu tanpa akun</a>
+        </section>
       </section>
 
-      <section class="card" id="login-card">
-        <form id="guest-form" class="stack">
-          <h2>Masuk arena</h2>
-          <p>Main sebagai tamu. Cukup nickname, tanpa email dan password.</p>
-          <label>Nickname<input name="nickname" autocomplete="nickname" placeholder="contoh: goldhunter" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]{3,20}" required /></label>
-          <button class="btn primary" type="submit">Masuk</button>
-          <button class="btn ghost" type="button" data-to="recover">Punya kode pemulihan?</button>
-        </form>
-        <form id="recover-form" class="stack" hidden>
-          <h2>Pulihkan akun</h2>
-          <p>Tempel kode pemulihan yang kamu simpan waktu daftar.</p>
-          <label>Kode pemulihan<input name="code" autocomplete="off" spellcheck="false" placeholder="rc-…" required /></label>
-          <button class="btn primary" type="submit">Pulihkan</button>
-          <button class="btn ghost" type="button" data-to="guest">Kembali</button>
-        </form>
-        <div id="code-box" class="stack" hidden>
-          <h2>Simpan kode ini</h2>
-          <p>Ini satu-satunya cara masuk lagi dari perangkat lain. Kode cuma tampil sekali.</p>
-          <code class="code" id="code-value"></code>
-          <button class="btn ghost" type="button" id="code-copy">Salin kode</button>
-          <button class="btn primary" type="button" id="code-done">Sudah saya simpan</button>
+      <section class="sect" id="fitur">
+        <p class="eyebrow">Fitur</p>
+        <h2>Satu arena, banyak cara latihan</h2>
+        <div class="feats">
+          <article class="feat hot"><svg viewBox="0 0 24 24"><path d="M4 20 14 10M10 4l6 6M20 20 10 10M14 4 8 10" /></svg><h3>Duel</h3><p>Potongan chart tanpa tanggal dan harga asli. Buy, sell, atau skip sebelum waktu habis. Lawan teman lewat kode atau latihan solo.</p></article>
+          <article class="feat"><svg viewBox="0 0 24 24"><path d="M6 4v16M6 8H4v6h2M12 6v14M12 9h2v5h-2M18 3v15M18 6h2v7h-2" /></svg><h3>Chart &amp; replay</h3><p>Chart M1 sampai D1, indikator, alat gambar, dan bar replay dengan trading simulasi.</p></article>
+          <article class="feat"><svg viewBox="0 0 24 24"><path d="M3 16h18M5 13l3-4 3 2 4-6" /></svg><h3>Backtest &amp; jurnal</h3><p>Uji strategi otomatis di data setahun, simpan trade ke jurnal lengkap dengan screenshot.</p></article>
+          <article class="feat"><svg viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4" /></svg><h3>Leaderboard</h3><p>Total R dari duel 7 hari terakhir. Hasil lawan baru terbuka setelah duel selesai.</p></article>
+          <article class="feat locked"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg><h3>Materi</h3><p>Modul belajar dari dasar. Segera hadir.</p></article>
         </div>
-        <p class="err" id="login-err" role="alert" hidden></p>
-        <a class="skip" href="/chart.html">Lewati, buka chart tanpa akun</a>
       </section>
+
+      <section class="sect" id="cara">
+        <p class="eyebrow">Cara main</p>
+        <h2>Tiga langkah ke arena</h2>
+        <ol class="steps">
+          <li><b>1</b><h3>Buat akun</h3><p>Pilih nickname, simpan kode pemulihan.</p></li>
+          <li><b>2</b><h3>Mulai duel</h3><p>Analisa potongan chart, pasang SL dan TP, kunci keputusan.</p></li>
+          <li><b>3</b><h3>Lihat hasil</h3><p>Chart berjalan, skor R keluar, peringkat naik.</p></li>
+        </ol>
+        <a class="btn primary" href="#daftar">Buat akun sekarang</a>
+      </section>
+
+      <footer class="foot">runcandell · data XAUUSD dari MT5 · gratis untuk belajar, bukan saran investasi</footer>
     </main>
 
     <!-- ============ DASHBOARD ============ -->

@@ -12,7 +12,7 @@ npm run build      # hasil di web/dist
 ```
 
 Halaman:
-- `/` arena: login tamu (nickname → kode pemulihan) lalu dashboard: mulai/gabung duel, duel yang belum selesai, rekor kamu, leaderboard total R 7 hari, menu Materi (terkunci). Topeng 3D (three.js, dimuat belakangan) mengikuti layout; tanpa WebGL pakai logo SVG.
+- `/` arena: intro pertama kali (mata muncul dari gelap, WELCOME, topeng 3D dengan api ungu), landing page dengan form buat akun di dalamnya (nickname → kode pemulihan), lalu dashboard: mulai/gabung duel, duel yang belum selesai, rekor kamu, leaderboard total R 7 hari, menu Materi (terkunci). Topeng 3D (three.js, dimuat belakangan) mengikuti layout; tanpa WebGL pakai logo SVG.
 - `/chart.html` chart lengkap (bisa tanpa akun). `?open=duel` membuka dialog duel, `?duel=KODE` langsung ke duel. Link lama `/?duel=KODE` dialihkan ke sini.
 
 Fitur chart: candlestick + panel volume, timeframe M1–D1, zona waktu (UTC/WIB/London/New York), lompat ke tanggal, tombol ke candle terbaru, legend OHLC/volume/spread, data dimuat per file saat chart digeser. Alat gambar: garis horizontal, trendline, zona, Fibonacci; bisa dipilih, digeser, dihapus (Delete), tersimpan di browser.

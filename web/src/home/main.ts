@@ -15,25 +15,105 @@ const tone = (r: number) => (r > 0 ? 'pos' : r < 0 ? 'neg' : '')
 
 for (const el of document.querySelectorAll('.logo')) el.innerHTML = maskSvg()
 for (const el of document.querySelectorAll('.mask-fallback')) el.innerHTML = maskSvg()
-for (const el of document.querySelectorAll('.sigil, .avatar')) el.innerHTML = EYES_SIGIL
+for (const el of document.querySelectorAll('.sigil, .avatar, .intro-eyes')) el.innerHTML = EYES_SIGIL
 
 // three.js is the bulk of this page: load it after the UI is up
-let arena: Arena3D | null = null
 let slot: HTMLElement | null = null
-void import('./arena3d')
+const arenaReady: Promise<Arena3D | null> = import('./arena3d')
   .then(({ Arena3D }) => {
-    arena = new Arena3D($<HTMLCanvasElement>('arena3d'))
-    arena.follow(slot)
-    arena.start()
+    const a = new Arena3D($<HTMLCanvasElement>('arena3d'))
+    a.follow(slot)
+    a.start()
+    return a
   })
-  .catch(() => document.body.classList.add('no-gl')) // no WebGL: flat SVG mask instead
+  .catch(() => {
+    document.body.classList.add('no-gl') // no WebGL: flat SVG mask instead
+    return null
+  })
+let arena: Arena3D | null = null
+void arenaReady.then((a) => (arena = a))
 
 type View = 'login' | 'dash'
-function show(view: View) {
+function show(view: View, glide = false) {
   document.body.dataset.view = view
   scrollTo(0, 0)
   slot = $(view === 'login' ? 'slot-login' : 'slot-dash')
-  arena?.follow(slot)
+  arena?.follow(slot, glide)
+}
+
+// ---------- intro: dark, eyes open and blink, WELCOME, the mask rises in purple fire ----------
+
+const INTRO_KEY = 'rc.intro'
+const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+
+function introSeen() {
+  try {
+    return sessionStorage.getItem(INTRO_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+async function playIntro() {
+  const body = document.body
+  const intro = $('intro')
+  const eyes = $('intro-eyes')
+  const welcome = $('intro-welcome')
+  let skipped = false
+  let done!: () => void
+  const finished = new Promise<void>((r) => (done = r))
+  const skip = () => {
+    skipped = true
+    done()
+  }
+  $('intro-skip').addEventListener('click', skip, { once: true })
+  addEventListener('keydown', skip, { once: true })
+  /** sleeps, but resolves early when the user skips */
+  const step = (ms: number) => Promise.race([wait(ms), finished])
+
+  body.classList.add('intro')
+  intro.hidden = false
+  document.body.dataset.view = 'login' // laid out (invisible) so the mask can glide to its slot later
+  slot = $('intro-slot')
+  void arenaReady.then((a) => {
+    a?.setStill(true)
+    a?.setReveal(0)
+    a?.follow(slot)
+  })
+
+  await step(500)
+  if (!skipped) eyes.classList.add('on')
+  await step(1500)
+  if (!skipped) welcome.classList.add('on')
+  await step(2300)
+  if (!skipped) {
+    eyes.classList.add('out')
+    welcome.classList.add('out')
+    // the 3D mask comes out of the dark, still, in purple fire
+    const a = await Promise.race([arenaReady, finished.then(() => null)])
+    a?.setReveal(1, 2200)
+  }
+  await step(3200)
+
+  // landing: lift the veil, mask glides into the hero, then starts to breathe
+  try {
+    sessionStorage.setItem(INTRO_KEY, '1')
+  } catch {
+    /* private mode */
+  }
+  removeEventListener('keydown', skip)
+  const a = arena
+  if (skipped) a?.setReveal(1, 600)
+  body.classList.remove('intro')
+  intro.hidden = true
+  show('login', !!a)
+  setTimeout(() => arena?.setStill(false), 1800)
+}
+
+function enterLanding() {
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (reduced || (introSeen() && !params.has('intro'))) return show('login')
+  void playIntro()
 }
 
 // ---------- login ----------
@@ -100,6 +180,7 @@ $('logout').addEventListener('click', () => {
     guestForm.reset()
     recoverForm.reset()
     loginPane('guest')
+    arena?.setStill(false)
     show('login')
   })
 })
@@ -159,7 +240,7 @@ async function boot() {
   try {
     await enter((await api.me()).user)
   } catch {
-    show('login') // 401, or the account server is down: login still lets you skip to the chart
+    enterLanding() // 401, or the account server is down: the landing still lets you skip to the chart
   }
 }
 void boot()
