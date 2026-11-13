@@ -10,7 +10,7 @@ Data: XAUUSD M1 dari MetaTrader 5 (gratis), mulai 3 bulan. Field: `time` (UTC), 
 |---|---|---|
 | Export data | Python + package `MetaTrader5` | gratis, langsung dari terminal MT5 |
 | Simpan data | Parquet (int point + delta + zstd), piramida timeframe | ±8 B/candle, 10 tahun ±29 MB |
-| Baca data di browser | `hyparquet` + `hyparquet-compressors` | file statis via CDN, VPS tidak terbebani |
+| Baca data di browser | `hyparquet` + `fzstd` | file statis via CDN, VPS tidak terbebani |
 | Frontend | Vite + TypeScript + `lightweight-charts` | chart open-source TradingView, Apache 2.0 |
 | Hitung indikator & backtest | TypeScript di Web Worker | UI tidak macet |
 | Server (mulai fase 5) | Node + Hono + SQLite + WebSocket | murah, satu VPS cukup |

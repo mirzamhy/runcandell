@@ -1,0 +1,261 @@
+:root {
+  --bg: #0b0e14;
+  --panel: #11151d;
+  --border: #1e2430;
+  --text: #c9d1d9;
+  --muted: #7d8590;
+  --accent: #f5a524;
+  --up: #26a69a;
+  --down: #ef5350;
+  --hover: #1a2030;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.4 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  overflow: hidden;
+}
+
+button,
+select,
+input {
+  font: inherit;
+  color: inherit;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 9px;
+  min-height: 30px;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:hover,
+select:hover {
+  background: var(--hover);
+}
+
+button:focus-visible,
+select:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.brand {
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.02em;
+}
+
+.symbol {
+  font-weight: 600;
+  padding: 0 8px;
+  border-left: 1px solid var(--border);
+}
+
+.tfs {
+  display: flex;
+  gap: 2px;
+}
+
+.tfs button {
+  border-color: transparent;
+  background: transparent;
+  padding: 4px 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tfs button[aria-pressed='true'] {
+  color: var(--accent);
+  background: var(--hover);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.goto {
+  display: flex;
+  gap: 4px;
+}
+
+.goto input {
+  color-scheme: dark;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  min-height: 0;
+}
+
+.tools {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 0;
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.tools button {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-color: transparent;
+  background: transparent;
+}
+
+.tools button[aria-pressed='true'] {
+  background: var(--hover);
+  border-color: var(--border);
+}
+
+.tools svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.tools button[data-tool='cursor'] svg {
+  fill: currentColor;
+  stroke: none;
+}
+
+.tools button[aria-pressed='true'] svg {
+  color: var(--accent);
+}
+
+.tools-sep {
+  width: 22px;
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+.chart-wrap {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+.chart {
+  position: absolute;
+  inset: 0;
+}
+
+.legend {
+  position: absolute;
+  top: 6px;
+  left: 10px;
+  z-index: 3;
+  pointer-events: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 4px var(--bg);
+}
+
+.legend .k {
+  color: var(--muted);
+  margin-right: 3px;
+}
+
+.legend .up {
+  color: var(--up);
+}
+
+.legend .down {
+  color: var(--down);
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  text-align: center;
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  color: var(--text);
+}
+
+.overlay[hidden] {
+  display: none;
+}
+
+.overlay code {
+  display: block;
+  margin-top: 8px;
+  color: var(--accent);
+}
+
+.statusbar {
+  padding: 4px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 640px) {
+  .topbar {
+    padding: 6px 8px;
+    gap: 6px;
+  }
+  .brand,
+  .spacer {
+    display: none;
+  }
+  .tfs {
+    order: 3;
+    width: 100%;
+    overflow-x: auto;
+  }
+  .goto input {
+    width: 150px;
+  }
+  .workspace {
+    grid-template-columns: 40px 1fr;
+  }
+}

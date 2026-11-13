@@ -2,6 +2,19 @@
 
 Tempat belajar trading XAUUSD gratis: chart, indikator, bar replay, backtest, dan duel antar user. Planning lengkap di [docs/PLAN.md](docs/PLAN.md).
 
+## Web (F1: chart viewer)
+
+```bash
+cd web
+npm install
+npm run dev        # http://localhost:5200, data dibaca dari ../data/build
+npm run build      # hasil di web/dist
+```
+
+Fitur: candlestick + panel volume, timeframe M1–D1, zona waktu (UTC/WIB/London/New York), lompat ke tanggal, tombol ke candle terbaru, legend OHLC/volume/spread, data dimuat per file saat chart digeser. Alat gambar: garis horizontal, trendline, zona, Fibonacci; bisa dipilih, digeser, dihapus (Delete), tersimpan di browser.
+
+Produksi: set `VITE_DATA_URL` ke URL folder data di CDN (default `/data`).
+
 ## Data (F0)
 
 Sumber: XAUUSD M1 dari terminal MetaTrader 5 (Windows, terminal terpasang dan login). Data tidak disimpan di repo; buat ulang dengan:
