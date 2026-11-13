@@ -30,4 +30,7 @@ export default defineConfig({
   // API server (runcandell/server) on 5201; same origin through the proxy so the session cookie just works
   server: { port: 5200, strictPort: true, proxy: { '/api': 'http://127.0.0.1:5201' } },
   worker: { format: 'es' },
+  // three.js alone is ~520 kB; it loads lazily on the home page only
+  // two pages: arena home (login + dashboard) and the chart app
+  build: { chunkSizeWarningLimit: 600, rolldownOptions: { input: { main: resolve(import.meta.dirname, 'index.html'), chart: resolve(import.meta.dirname, 'chart.html') } } },
 })

@@ -200,3 +200,9 @@ export const duelApi = {
   decide: (code: string, n: number, d: { side: 'buy' | 'sell' | 'skip'; sl?: number | null; tp?: number | null }) =>
     call<DecideResult>('POST', `/duels/${encodeURIComponent(code)}/rounds/${n}/decide`, d),
 }
+
+export interface Stats {
+  me: { totalR: number; duels: number; trades: number; winRate: number | null; rank: number | null; weekR: number | null }
+  board: { rank: number; nickname: string; duels: number; totalR: number; me: boolean }[]
+}
+export const statsApi = { get: () => call<Stats>('GET', '/stats') }

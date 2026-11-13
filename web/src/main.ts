@@ -1100,8 +1100,10 @@ async function boot() {
   render()
   showLatest(160)
   void account.init().then(() => {
-    const code = new URLSearchParams(location.search).get('duel')
+    const q = new URLSearchParams(location.search)
+    const code = q.get('duel')
     if (code) void duel.open(code)
+    else if (q.get('open') === 'duel') void duel.open()
   })
   gotoInput.value = toInputValue(displayTime(store.bars[store.bars.length - 1].time))
   showOverlay(null)

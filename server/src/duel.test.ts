@@ -147,3 +147,32 @@ test('async duel: join rules and hidden opponent results', async () => {
   assert.equal(end.rounds[0].results.length, 2)
   assert.notEqual(end.players.find((p: { nickname: string }) => p.nickname === 'alice').totalR, null)
 })
+
+test('stats: own record and weekly board of finished duels only', async () => {
+  const { client } = setup()
+  const a = client()
+  const b = client()
+  await a('POST', '/api/auth/guest', { nickname: 'alice' })
+  await b('POST', '/api/auth/guest', { nickname: 'bob' })
+  const empty = (await a('GET', '/api/stats')).body
+  assert.deepEqual([empty.me.duels, empty.me.totalR, empty.me.winRate, empty.me.rank, empty.board.length], [0, 0, null, null, 0])
+
+  // alice: solo, 1 round, traded
+  const solo = (await a('POST', '/api/duels', { mode: 'solo', ...PARAMS, rounds: 1 })).body.code
+  const s = (await a('POST', `/api/duels/${solo}/rounds/1/start`)).body
+  const d = (await a('POST', `/api/duels/${solo}/rounds/1/decide`, { side: 'buy', sl: s.cut.close + s.cut.spread - s.minStop * 2 })).body
+  // async duel with bob, only alice finished: must not show on the board yet
+  const as = (await a('POST', '/api/duels', { mode: 'async', ...PARAMS, rounds: 1 })).body.code
+  await b('POST', `/api/duels/${as}/join`)
+  await b('POST', `/api/duels/${as}/rounds/1/start`)
+  await b('POST', `/api/duels/${as}/rounds/1/decide`, { side: 'skip' })
+
+  const st = (await a('GET', '/api/stats')).body
+  assert.equal(st.me.duels, 1)
+  assert.equal(st.me.trades, 1)
+  assert.equal(st.me.totalR, Math.round(d.outcome.r * 100) / 100)
+  assert.equal(st.me.winRate, d.outcome.r > 0 ? 1 : 0)
+  assert.deepEqual(st.board.map((x: { nickname: string }) => x.nickname), ['alice'], 'bob unfinished-duel result hidden')
+  assert.equal(st.me.rank, 1)
+  assert.equal((await b('GET', '/api/stats')).body.me.rank, null)
+})

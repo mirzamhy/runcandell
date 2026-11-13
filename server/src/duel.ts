@@ -375,4 +375,39 @@ export function mountDuels(app: Hono<Env>, db: DatabaseSync, market: MarketData 
       totalR: me.total_r,
     })
   })
+
+  /**
+   * Dashboard numbers. The weekly board counts only duels that are over (both players done),
+   * so an opponent's hidden result never leaks through a total.
+   */
+  app.get('/api/stats', (c) => {
+    const user = c.get('user')
+    const since = now() - 7 * DAY
+    const board = db
+      .prepare(
+        `SELECT u.id, u.nickname, COUNT(*) AS duels, ROUND(SUM(p.total_r), 2) AS total_r
+         FROM duel_players p JOIN duels d ON d.id = p.duel_id JOIN users u ON u.id = p.user_id
+         WHERE d.status = 'done' AND p.finished_at >= ?
+         GROUP BY u.id ORDER BY total_r DESC, duels DESC, u.nickname LIMIT 100`,
+      )
+      .all(since) as { id: number; nickname: string; duels: number; total_r: number }[]
+    const mine = db
+      .prepare('SELECT COUNT(*) AS duels, ROUND(COALESCE(SUM(total_r), 0), 2) AS total_r FROM duel_players WHERE user_id = ? AND finished_at IS NOT NULL')
+      .get(user.id) as { duels: number; total_r: number }
+    const trades = db
+      .prepare("SELECT COUNT(*) AS n, COALESCE(SUM(r > 0), 0) AS wins FROM duel_decisions WHERE user_id = ? AND side IN ('buy', 'sell')")
+      .get(user.id) as { n: number; wins: number }
+    const rank = board.findIndex((x) => x.id === user.id)
+    return c.json({
+      me: {
+        totalR: mine.total_r,
+        duels: mine.duels,
+        trades: trades.n,
+        winRate: trades.n ? trades.wins / trades.n : null,
+        rank: rank >= 0 ? rank + 1 : null,
+        weekR: rank >= 0 ? board[rank].total_r : null,
+      },
+      board: board.slice(0, 10).map((x, i) => ({ rank: i + 1, nickname: x.nickname, duels: x.duels, totalR: x.total_r, me: x.id === user.id })),
+    })
+  })
 }
