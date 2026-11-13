@@ -6,15 +6,19 @@ import {
   LineStyle,
   TickMarkType,
   createChart,
+  createSeriesMarkers,
   type CandlestickData,
   type HistogramData,
   type LogicalRange,
   type MouseEventParams,
+  type SeriesMarker,
   type Time,
   type UTCTimestamp,
 } from 'lightweight-charts'
 import './style.css'
-import { SeriesStore, TIMEFRAMES, loadManifest, type Bar, type Manifest, type TF } from './data'
+import { BacktestUI } from './backtest/ui'
+import type { BtTrade } from './backtest/run'
+import { SeriesStore, TIMEFRAMES, dataSpan, loadManifest, type Bar, type Manifest, type TF } from './data'
 import { DrawingLayer, type Drawing, type Tool } from './drawings'
 import { DEFAULT_CONFIG } from './engine/account'
 import { IndicatorManager } from './indicators/manager'
@@ -78,6 +82,8 @@ const replayBar = $('replay-bar')
 const pickBar = $('pick-bar')
 const pickLine = $('pick-line')
 const tradeEl = $('trade')
+const btBtn = $<HTMLButtonElement>('bt-btn')
+const btEl = $('bt')
 
 const css = getComputedStyle(document.documentElement)
 const color = (name: string) => css.getPropertyValue(name).trim()
@@ -219,6 +225,58 @@ const trade = new TradeUI({
   },
 })
 
+// ---------- backtest ----------
+
+let bt: BacktestUI | null = null
+let btTrades: BtTrade[] | null = null
+const btMarkers = createSeriesMarkers(candles, [])
+const btOpen = () => document.body.classList.contains('bt')
+
+/** Entry arrows and exit dots of backtest trades inside the loaded window. */
+function syncBtMarkers() {
+  if (!btTrades || !btOpen() || replay || !shown.length) return btMarkers.setMarkers([])
+  const first = shown[0].time
+  const end = shown[shown.length - 1].time + store.tfSec
+  const out: SeriesMarker<Time>[] = []
+  const at = (t: number) => (t >= first && t < end ? (shownTimes[floorIndex(shown, t)] ?? null) : null)
+  for (const t of btTrades) {
+    const a = at(t.openTime)
+    const b = at(t.closeTime)
+    if (a !== null)
+      out.push(t.side === 'buy'
+        ? { time: a, position: 'belowBar', shape: 'arrowUp', color: '#4c8dff', text: 'B' }
+        : { time: a, position: 'aboveBar', shape: 'arrowDown', color: '#ef5350', text: 'S' })
+    if (b !== null)
+      out.push({ time: b, position: t.side === 'buy' ? 'aboveBar' : 'belowBar', shape: 'circle', color: t.pnl >= 0 ? '#26a69a' : '#ef5350', text: (t.pnl >= 0 ? '+' : '') + t.pnl.toFixed(0) })
+  }
+  out.sort((x, y) => (x.time as number) - (y.time as number))
+  btMarkers.setMarkers(out)
+}
+
+function setBacktest(open: boolean) {
+  if (open && replay) return toast('Keluar dari replay dulu untuk backtest.', 'bad')
+  if (open && !bt) {
+    bt = new BacktestUI({
+      root: btEl,
+      zone: () => zone,
+      span: dataSpan(manifest),
+      onTrades: (t) => {
+        btTrades = t
+        syncBtMarkers()
+      },
+      onJump: async (t, stf) => {
+        if (stf !== tf) await switchTF(stf)
+        await goTo(t)
+      },
+      onClose: () => setBacktest(false),
+    })
+  }
+  document.body.classList.toggle('bt', open)
+  btEl.hidden = !open
+  btBtn.setAttribute('aria-pressed', String(open))
+  syncBtMarkers()
+}
+
 // ---------- rendering ----------
 
 /** Identity of the bar window on the chart: incremental updates are only valid within one. */
@@ -289,7 +347,7 @@ function render(opts: { incremental?: boolean } = {}) {
   if (replay) {
     trade.refresh()
     updateClock()
-  }
+  } else syncBtMarkers()
 }
 
 const fmt = (n: number) => n.toFixed(2)
@@ -604,6 +662,7 @@ function play() {
 function buildReplayControls() {
   replayBtn.addEventListener('click', () => {
     if (replay) return void exitReplay()
+    if (btOpen()) setBacktest(false)
     if (picking) return setPicking(false)
     const saved = load<ReplaySession | null>(KEY.replay, null)
     if (saved && confirm('Lanjutkan sesi replay sebelumnya?\n\nOK = lanjutkan, Batal = mulai sesi baru.')) {
@@ -763,6 +822,7 @@ function buildControls() {
   })
   chart.timeScale().subscribeVisibleLogicalRangeChange(onRangeChange)
   buildReplayControls()
+  btBtn.addEventListener('click', () => setBacktest(!btOpen()))
 }
 
 if (import.meta.env.DEV) {
@@ -776,6 +836,8 @@ if (import.meta.env.DEV) {
     trade,
     stepOnce,
     startReplay,
+    getBacktest: () => bt,
+    setBacktest,
   }
 }
 

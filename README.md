@@ -27,6 +27,13 @@ Bar replay + paper trading (F3), lewat tombol **Replay**:
 - Panel: saldo, equity, posisi, order, riwayat, statistik (win rate, profit factor, max drawdown), kurva equity. Sesi tersimpan dan bisa dilanjutkan.
 - Tes engine: `npm test` di folder `web`.
 
+Backtest (F4), lewat tombol **Backtest**:
+- Strategi tanpa kode (kondisi dari indikator, contoh siap pakai) atau kode JavaScript, jalan di Web Worker.
+- Sinyal dibaca saat candle tutup, order masuk di open candle berikutnya; SL/TP dicek per menit pakai data M1.
+- SL/TP: jarak $, kelipatan ATR, atau R:R. Ukuran: lot tetap atau % saldo. Filter jam entry, balik posisi, tutup setelah N candle, komisi, slippage.
+- Laporan: net profit, win rate, profit factor, max drawdown, rata-rata R, expectancy, Sharpe, kurva equity + drawdown, per jam/hari/sesi. Marker trade di chart, klik trade untuk lompat.
+- Optimasi grid 1–2 parameter (maks 200 kombinasi) dengan data latih 70% / uji 30% dan peringatan overfitting. Bandingkan dua hasil (A/B).
+
 Produksi: set `VITE_DATA_URL` ke URL folder data di CDN (default `/data`).
 
 ## Data (F0)

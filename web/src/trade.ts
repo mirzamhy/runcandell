@@ -16,7 +16,7 @@ const fmtPx = (n: number | null) => (n === null ? '–' : n.toFixed(2))
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
 
 const COLORS = { buy: '#4c8dff', sell: '#ef5350', sl: '#ef5350', tp: '#26a69a', pending: '#f5a524' }
-const REASON: Record<string, string> = { tp: 'TP', sl: 'SL', manual: 'Manual', stopout: 'Stop-out' }
+const REASON: Record<string, string> = { tp: 'TP', sl: 'SL', manual: 'Manual', stopout: 'Stop-out', signal: 'Sinyal', time: 'Waktu', end: 'Akhir data' }
 
 // ---------- toast ----------
 

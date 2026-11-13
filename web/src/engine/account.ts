@@ -42,7 +42,8 @@ export interface PendingOrder {
   createdTime: number
 }
 
-export type CloseReason = 'tp' | 'sl' | 'manual' | 'stopout'
+/** signal/time/end are used by the backtester */
+export type CloseReason = 'tp' | 'sl' | 'manual' | 'stopout' | 'signal' | 'time' | 'end'
 
 export interface ClosedTrade {
   id: number
@@ -114,6 +115,8 @@ export class Account {
   /** last processed candle: the "now" price */
   last: Candle | null = null
   private nextId = 1
+  /** the backtester samples equity itself (per strategy bar) */
+  recordEquity = true
   onEvent: (e: AccountEvent) => void = () => {}
 
   constructor(readonly cfg: AccountConfig = DEFAULT_CONFIG) {
@@ -299,6 +302,7 @@ export class Account {
     const used = this.usedMargin()
     if (used > 0 && this.equity(q) / used < this.cfg.stopOutLevel) this.closeAll('stopout')
 
+    if (!this.recordEquity) return
     const eq = round2(this.equity(q))
     const lastPoint = this.equityCurve[this.equityCurve.length - 1]
     if (!lastPoint || lastPoint[1] !== eq) this.equityCurve.push([bar.time, eq])

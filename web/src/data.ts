@@ -86,6 +86,21 @@ async function readChunk(m: Manifest, c: ChunkInfo): Promise<Bar[]> {
   return out
 }
 
+/** All bars of `tf` with from <= time < to (backtest). */
+export async function loadRange(m: Manifest, tf: TF, from: number, to: number): Promise<Bar[]> {
+  const chunks = m.timeframes[tf].filter((c) => c.to >= from && c.from < to).sort((a, b) => a.from - b.from)
+  const parts = await Promise.all(chunks.map((c) => loadChunk(m, c)))
+  const out: Bar[] = []
+  for (const part of parts) for (const b of part) if (b.time >= from && b.time < to) out.push(b)
+  return out
+}
+
+/** First and last bar time over all M1 data. */
+export function dataSpan(m: Manifest): { from: number; to: number } {
+  const c = m.timeframes.M1
+  return { from: Math.min(...c.map((x) => x.from)), to: Math.max(...c.map((x) => x.to)) }
+}
+
 /**
  * Contiguous window of loaded chunks for one timeframe.
  * Logical index i = position in `bars`. Times between/after bars map to fractional indices,

@@ -28,4 +28,5 @@ function serveData(): Plugin {
 export default defineConfig({
   plugins: [serveData()],
   server: { port: 5200, strictPort: true },
+  worker: { format: 'es' },
 })
