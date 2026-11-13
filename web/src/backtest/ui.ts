@@ -10,6 +10,7 @@ import {
   SOURCES,
   defaultSpec,
   describe,
+  fmtCond,
   listParams,
   operand,
   withParams,
@@ -38,7 +39,17 @@ const DAYS = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
 const SPLIT = 0.7
 const MAX_COMBOS = 200
 
-const KEY = { spec: 'rc.v1.bt.spec', saved: 'rc.v1.bt.saved' }
+/** period chips: key, days back from the end of the data (0 = all), label */
+const PERIODS: [string, number, string][] = [
+  ['1m', 30, '1 bulan'],
+  ['3m', 91, '3 bulan'],
+  ['6m', 182, '6 bulan'],
+  ['1y', 365, '1 tahun'],
+  ['all', 0, 'Semua data'],
+]
+const MIRROR: Record<Op, Op> = { gt: 'lt', lt: 'gt', xup: 'xdown', xdown: 'xup' }
+
+const KEY = { spec: 'rc.v1.bt.spec', saved: 'rc.v1.bt.saved', height: 'rc.v1.bt.height' }
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 })
@@ -136,6 +147,7 @@ export class BacktestUI {
         <button type="button" class="bt-x" data-act="close" aria-label="Tutup backtest" title="Tutup">×</button>
       </header>
       <div class="bt-body"></div>`
+    this.grip(r)
     this.body = r.querySelector('.bt-body')!
     this.status = r.querySelector('.bt-status')!
     this.runBtn = r.querySelector('.bt-run')!
@@ -145,6 +157,11 @@ export class BacktestUI {
     r.addEventListener('keydown', (e) => {
       // Tab inside the code editor inserts spaces
       const t = e.target as HTMLTextAreaElement
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault()
+        if (!this.running) this.run()
+        return
+      }
       if (e.key === 'Tab' && t.tagName === 'TEXTAREA') {
         e.preventDefault()
         t.setRangeText('  ', t.selectionStart, t.selectionEnd, 'end')
@@ -155,15 +172,50 @@ export class BacktestUI {
     this.show('strategy')
   }
 
+  /** Drag the panel's top edge to give it more or less room; double-click toggles a tall panel. */
+  private grip(r: HTMLElement) {
+    const g = document.createElement('div')
+    g.className = 'bt-grip'
+    g.title = 'Geser untuk ubah tinggi panel (klik dua kali: besar/kecil)'
+    r.prepend(g)
+    const ws = () => r.parentElement as HTMLElement
+    const set = (px: number | null) => {
+      if (px === null) ws().style.removeProperty('--bt-h')
+      else ws().style.setProperty('--bt-h', `${Math.round(px)}px`)
+      save(KEY.height, px)
+    }
+    const h0 = load<number | null>(KEY.height, null)
+    if (h0) ws().style.setProperty('--bt-h', `${h0}px`)
+    const clamp = (px: number) => Math.max(160, Math.min(ws().clientHeight - 120, px))
+    g.addEventListener('pointerdown', (e) => {
+      e.preventDefault()
+      g.setPointerCapture(e.pointerId)
+      const bottom = ws().getBoundingClientRect().bottom
+      const move = (ev: PointerEvent) => set(clamp(bottom - ev.clientY))
+      const up = () => {
+        g.removeEventListener('pointermove', move)
+        g.removeEventListener('pointerup', up)
+      }
+      g.addEventListener('pointermove', move)
+      g.addEventListener('pointerup', up)
+    })
+    g.addEventListener('dblclick', () => {
+      const tall = r.getBoundingClientRect().height > ws().clientHeight * 0.6
+      set(tall ? null : clamp(ws().clientHeight - 160))
+    })
+  }
+
   // ---------- tabs ----------
 
   show(tab: Tab) {
+    const same = this.tab === tab
     this.tab = tab
     for (const b of this.o.root.querySelectorAll<HTMLElement>('[data-tab]')) b.setAttribute('aria-selected', String(b.dataset.tab === tab))
-    this.render()
+    this.render(!same)
   }
 
-  private render() {
+  private render(top = false) {
+    const keep = this.body.scrollTop
     const html =
       this.tab === 'strategy'
         ? this.strategyHtml()
@@ -175,7 +227,7 @@ export class BacktestUI {
               ? this.optimizeHtml()
               : this.compareHtml()
     this.body.innerHTML = html
-    this.body.scrollTop = 0
+    this.body.scrollTop = top ? 0 : keep
     this.redrawCanvases()
   }
 
@@ -196,6 +248,38 @@ export class BacktestUI {
     const s = this.spec
     if (act === 'run') return this.running ? this.cancel() : this.run()
     if (act === 'close') return this.o.onClose()
+    if (act === 'preset') {
+      const p = PRESETS[+el.dataset.v!]
+      if (!p) return
+      const keep = { from: s.from, to: s.to, tf: s.tf, balance: s.balance, leverage: s.leverage, commission: s.commission, slippage: s.slippage }
+      this.spec = { ...p.make(), ...keep, name: p.name }
+      return this.changed(true)
+    }
+    if (act === 'tf') {
+      s.tf = el.dataset.v as TF
+      return this.changed(true)
+    }
+    if (act === 'period') {
+      const k = el.dataset.v!
+      const day = 86400
+      const end = Math.ceil(this.o.span.to / day) * day
+      if (k === 'custom') {
+        if (s.to === null) Object.assign(s, { from: s.from ?? end - 30 * day, to: end })
+      } else {
+        const d = PERIODS.find(([x]) => x === k)![1]
+        Object.assign(s, { from: d ? this.o.span.to - d * day : null, to: null })
+      }
+      return this.changed(true)
+    }
+    if (act === 'mirror') {
+      s.short = s.long.map((c) => ({ a: structuredClone(c.a), op: MIRROR[c.op], b: structuredClone(c.b) }))
+      // a fixed level mirrors around its own scale: RSI 30 becomes 70, 0 stays 0
+      for (const c of s.short)
+        for (const o of [c.a, c.b]) if (o.src === 'num' && o.p[0] > 0 && o.p[0] < 100 && (c.a.src === 'rsi' || c.a.src.startsWith('stoch'))) o.p[0] = 100 - o.p[0]
+      s.name = ''
+      toast('Syarat sell diisi kebalikan syarat buy.', 'good')
+      return this.changed(true)
+    }
     if (act === 'mode') {
       s.mode = el.dataset.v as StrategySpec['mode']
       return this.changed(true)
@@ -203,6 +287,7 @@ export class BacktestUI {
     if (act === 'add') {
       const list = el.dataset.list as (typeof LISTS)[number][0]
       s[list].push({ a: operand('close'), op: 'gt', b: operand('ema', [50]) })
+      s.name = ''
       return this.changed(true)
     }
     if (act === 'del') {
@@ -241,16 +326,10 @@ export class BacktestUI {
   private onInput(e: Event, commit: boolean) {
     const el = e.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
     const s = this.spec
-    if (el.dataset.act === 'preset' && commit) {
-      const p = PRESETS[+el.value]
-      if (!p) return
-      const keep = { from: s.from, to: s.to, tf: s.tf, balance: s.balance, leverage: s.leverage, commission: s.commission, slippage: s.slippage }
-      this.spec = { ...p.make(), ...keep, name: p.name }
-      return this.changed(true)
-    }
     if (el.dataset.src && commit) {
       // operand source changed: reset its parameters to the defaults
       setPath(s, el.dataset.src, operand(el.value))
+      s.name = ''
       return this.changed(true)
     }
     if (el.dataset.date && commit) {
@@ -284,13 +363,20 @@ export class BacktestUI {
     }
     if (getPath(s, path) === v) return
     setPath(s, path, v)
-    this.changed(false)
+    // edited rules are no longer the preset they started from
+    if (/^(long|short|exit)/.test(path)) s.name = ''
+    // choices that change which fields exist need a redraw; typing does not
+    this.changed(commit && (/\.kind$/.test(path) || path === 'hours.on'))
   }
 
   private changed(rerender: boolean) {
     save(KEY.spec, this.spec)
     this.optForm = null
-    if (rerender) this.render()
+    if (rerender) return this.render()
+    const sum = this.body.querySelector('[data-summary]')
+    if (sum) sum.innerHTML = this.sentence()
+    const err = this.body.querySelector('[data-err]')
+    if (err) err.textContent = this.validate() ?? ''
   }
 
   // ---------- strategy tab ----------
@@ -301,52 +387,104 @@ export class BacktestUI {
     return formatWall(shift(end ? t - 86400 : t), false)
   }
 
+  /** Which period chip matches the current date range ('' = custom). */
+  private periodKey(): string {
+    const s = this.spec
+    if (s.from === null && s.to === null) return 'all'
+    if (s.to !== null || s.from === null) return ''
+    const days = (this.o.span.to - s.from) / 86400
+    const hit = PERIODS.find(([, d]) => d && Math.abs(days - d) < 1.5)
+    return hit ? hit[0] : ''
+  }
+
+  /** The strategy in one or two plain sentences, updated as the form changes. */
+  private sentence(): string {
+    const s = this.spec
+    const b = (t: string) => `<b>${esc(t)}</b>`
+    const rules = (list: Cond[]) => list.map((c) => b(fmtCond(c))).join(' <i>dan</i> ')
+    const parts: string[] = []
+    if (s.mode === 'code') parts.push('Sinyal dari <b>kode JavaScript</b>.')
+    else {
+      if (s.long.length) parts.push(`<span class="pos">BUY</span> saat ${rules(s.long)}.`)
+      if (s.short.length) parts.push(`<span class="neg">SELL</span> saat ${rules(s.short)}.`)
+      if (!s.long.length && !s.short.length) parts.push('<span class="neg">Belum ada aturan masuk.</span>')
+    }
+    const sl = s.sl.kind === 'none' ? 'tanpa stop loss' : s.sl.kind === 'atr' ? `SL ${b(`${s.sl.value}× ATR`)}` : `SL ${b(`$${s.sl.value}`)}`
+    const tp =
+      s.tp.kind === 'none' ? 'tanpa take profit' : s.tp.kind === 'rr' ? `TP ${b(`${s.tp.value}× jarak SL`)}` : s.tp.kind === 'atr' ? `TP ${b(`${s.tp.value}× ATR`)}` : `TP ${b(`$${s.tp.value}`)}`
+    const size = s.sizing.kind === 'risk' ? `risiko ${b(`${s.sizing.value}%`)} saldo per trade` : b(`${s.sizing.value} lot`)
+    parts.push(`${sl}, ${tp}, ${size}.`)
+    const per = PERIODS.find(([k]) => k === this.periodKey())
+    parts.push(`<span class="bt-muted">Candle ${s.tf} · ${per ? per[2] : 'rentang tanggal sendiri'}${s.hours.on ? ` · entry jam ${s.hours.from}–${s.hours.to}` : ''}</span>`)
+    return parts.join(' ')
+  }
+
   private strategyHtml(): string {
     const s = this.spec
     const shift = makeShifter(this.o.zone())
     const spanText = `${formatWall(shift(this.o.span.from), false)} s/d ${formatWall(shift(this.o.span.to), false)}`
     const opt = (v: string, label: string, cur: string) => `<option value="${v}"${v === cur ? ' selected' : ''}>${label}</option>`
+    const per = this.periodKey()
+    const err = this.validate()
     return `
-      <div class="bt-cols">
-        <section class="bt-card">
-          <h4>Strategi</h4>
-          <label class="bt-f"><span>Contoh</span>
-            <select data-act="preset"><option value="">${esc(s.name || 'Pilih contoh…')}</option>${PRESETS.map((p, i) => `<option value="${i}">${esc(p.name)}</option>`).join('')}</select></label>
-          <div class="bt-f"><span>Mode</span>
-            <div class="bt-seg">
-              <button type="button" data-act="mode" data-v="rules" aria-pressed="${s.mode === 'rules'}">Aturan</button>
-              <button type="button" data-act="mode" data-v="code" aria-pressed="${s.mode === 'code'}">Kode JS</button>
-            </div></div>
-          <label class="bt-f"><span>Timeframe</span><select data-path="tf">${TIMEFRAMES.map((t) => opt(t, t, s.tf)).join('')}</select></label>
-          <label class="bt-f"><span>Dari</span><input type="date" data-date="from" value="${this.dateValue(s.from, false)}" /></label>
-          <label class="bt-f"><span>Sampai</span><input type="date" data-date="to" value="${this.dateValue(s.to, true)}" /></label>
-          <p class="bt-hint">Data tersedia ${spanText}. Tanggal kosong = semua data.</p>
-          <p class="bt-hint">Sinyal dibaca saat candle tutup, order masuk di open candle berikutnya. SL/TP dicek per menit (data M1).</p>
+      <div class="st">
+        <div class="st-summary" data-summary>${this.sentence()}</div>
+
+        <section class="st-sec">
+          <h4><i>1</i> Pilih titik awal</h4>
+          <div class="st-chips">${PRESETS.map((p, i) => `<button type="button" class="st-chip" data-act="preset" data-v="${i}" aria-pressed="${p.name === s.name}">${esc(p.name)}</button>`).join('')}
+            <button type="button" class="st-chip" data-act="mode" data-v="${s.mode === 'code' ? 'rules' : 'code'}">${s.mode === 'code' ? '← Kembali ke aturan' : '{ } Tulis kode JS'}</button></div>
+          <p class="bt-hint">Contoh mengisi aturan di bawah. Setelah itu ubah sesukamu.</p>
         </section>
+
+        <section class="st-sec">
+          <h4><i>2</i> Data</h4>
+          <div class="st-row"><span class="st-lab">Candle</span><div class="bt-seg">${TIMEFRAMES.map((t) => `<button type="button" data-act="tf" data-v="${t}" aria-pressed="${t === s.tf}">${t}</button>`).join('')}</div></div>
+          <div class="st-row"><span class="st-lab">Periode</span><div class="bt-seg">${PERIODS.map(([k, , l]) => `<button type="button" data-act="period" data-v="${k}" aria-pressed="${k === per}">${l}</button>`).join('')}
+            <button type="button" data-act="period" data-v="custom" aria-pressed="${per === ''}">Pilih tanggal</button></div></div>
+          ${per === '' ? `<div class="st-row"><span class="st-lab"></span><div class="st-dates"><input type="date" data-date="from" value="${this.dateValue(s.from, false)}" aria-label="Dari tanggal" /><span class="bt-muted">s/d</span><input type="date" data-date="to" value="${this.dateValue(s.to, true)}" aria-label="Sampai tanggal" /></div></div>` : ''}
+          <p class="bt-hint">Data tersedia ${spanText}.</p>
+        </section>
+
         ${s.mode === 'rules' ? this.rulesHtml() : this.codeHtml()}
-        <section class="bt-card">
-          <h4>Risiko & eksekusi</h4>
-          <div class="bt-f"><span>Stop loss</span><div class="bt-pair">
-            <select data-path="sl.kind">${opt('atr', '× ATR(14)', s.sl.kind)}${opt('price', 'Jarak $', s.sl.kind)}${opt('none', 'Tanpa SL', s.sl.kind)}</select>
-            <input type="number" step="any" min="0" data-path="sl.value" value="${s.sl.value}" aria-label="Nilai SL" /></div></div>
-          <div class="bt-f"><span>Take profit</span><div class="bt-pair">
-            <select data-path="tp.kind">${opt('rr', 'R:R (× jarak SL)', s.tp.kind)}${opt('atr', '× ATR(14)', s.tp.kind)}${opt('price', 'Jarak $', s.tp.kind)}${opt('none', 'Tanpa TP', s.tp.kind)}</select>
-            <input type="number" step="any" min="0" data-path="tp.value" value="${s.tp.value}" aria-label="Nilai TP" /></div></div>
-          <div class="bt-f"><span>Ukuran</span><div class="bt-pair">
-            <select data-path="sizing.kind">${opt('risk', '% saldo dirisikokan', s.sizing.kind)}${opt('fixed', 'Lot tetap', s.sizing.kind)}</select>
-            <input type="number" step="any" min="0.01" data-path="sizing.value" value="${s.sizing.value}" aria-label="Nilai ukuran" /></div></div>
-          <div class="bt-f"><span><label><input type="checkbox" data-path="hours.on"${s.hours.on ? ' checked' : ''} /> Jam entry</label></span><div class="bt-pair">
-            <input type="number" min="0" max="23" step="1" data-path="hours.from" value="${s.hours.from}" aria-label="Jam mulai" />
-            <span class="bt-muted">s/d</span>
-            <input type="number" min="0" max="24" step="1" data-path="hours.to" value="${s.hours.to}" aria-label="Jam selesai" /></div></div>
-          <p class="bt-hint">Jam mengikuti zona waktu chart. Contoh 14–23 WIB = London + New York.</p>
-          <label class="bt-f bt-check"><input type="checkbox" data-path="reverse"${s.reverse ? ' checked' : ''} /> Sinyal lawan membalik posisi</label>
-          <label class="bt-f"><span>Tutup setelah</span><div class="bt-pair"><input type="number" min="0" step="1" data-path="maxBars" value="${s.maxBars}" /><span class="bt-muted">candle (0 = mati)</span></div></label>
-          <label class="bt-f"><span>Saldo awal</span><input type="number" min="100" step="100" data-path="balance" value="${s.balance}" /></label>
-          <label class="bt-f"><span>Leverage</span><select data-path="leverage">${[50, 100, 200, 500, 1000].map((l) => `<option value="${l}"${l === s.leverage ? ' selected' : ''}>1:${l}</option>`).join('')}</select></label>
-          <label class="bt-f"><span>Komisi / lot</span><input type="number" min="0" step="0.5" data-path="commission" value="${s.commission}" /></label>
-          <label class="bt-f"><span>Slippage $</span><input type="number" min="0" step="0.01" data-path="slippage" value="${s.slippage}" /></label>
+
+        <section class="st-sec">
+          <h4><i>4</i> Keluar & ukuran posisi</h4>
+          <div class="st-grid">
+            <label class="st-field"><span>Stop loss</span><div class="bt-pair">
+              <select data-path="sl.kind">${opt('atr', '× ATR(14)', s.sl.kind)}${opt('price', 'Jarak $', s.sl.kind)}${opt('none', 'Tanpa SL', s.sl.kind)}</select>
+              ${s.sl.kind === 'none' ? '' : `<input type="number" step="any" min="0" data-path="sl.value" value="${s.sl.value}" aria-label="Nilai SL" />`}</div></label>
+            <label class="st-field"><span>Take profit</span><div class="bt-pair">
+              <select data-path="tp.kind">${opt('rr', '× jarak SL (R:R)', s.tp.kind)}${opt('atr', '× ATR(14)', s.tp.kind)}${opt('price', 'Jarak $', s.tp.kind)}${opt('none', 'Tanpa TP', s.tp.kind)}</select>
+              ${s.tp.kind === 'none' ? '' : `<input type="number" step="any" min="0" data-path="tp.value" value="${s.tp.value}" aria-label="Nilai TP" />`}</div></label>
+            <label class="st-field"><span>Ukuran posisi</span><div class="bt-pair">
+              <select data-path="sizing.kind">${opt('risk', '% saldo dirisikokan', s.sizing.kind)}${opt('fixed', 'Lot tetap', s.sizing.kind)}</select>
+              <input type="number" step="any" min="0.01" data-path="sizing.value" value="${s.sizing.value}" aria-label="Nilai ukuran" /></div></label>
+          </div>
+          <p class="bt-hint">ATR = rata-rata panjang candle 14 terakhir, jadi SL ikut melebar saat pasar ramai. "% saldo" menghitung lot supaya kalau kena SL, rugi segitu persen.</p>
+          <details class="st-more"${s.hours.on || s.reverse || s.maxBars > 0 || s.commission > 0 || s.slippage > 0 ? ' open' : ''}>
+            <summary>Lanjutan: jam trading, modal, biaya</summary>
+            <div class="st-grid">
+              <div class="st-field"><span><label><input type="checkbox" data-path="hours.on"${s.hours.on ? ' checked' : ''} /> Hanya entry jam</label></span><div class="bt-pair">
+                <input type="number" min="0" max="23" step="1" data-path="hours.from" value="${s.hours.from}" aria-label="Jam mulai"${s.hours.on ? '' : ' disabled'} />
+                <span class="bt-muted">s/d</span>
+                <input type="number" min="0" max="24" step="1" data-path="hours.to" value="${s.hours.to}" aria-label="Jam selesai"${s.hours.on ? '' : ' disabled'} /></div></div>
+              <label class="st-field"><span>Tutup paksa setelah</span><div class="bt-pair"><input type="number" min="0" step="1" data-path="maxBars" value="${s.maxBars}" /><span class="bt-muted">candle (0 = tidak)</span></div></label>
+              <label class="st-field"><span>Saldo awal $</span><input type="number" min="100" step="100" data-path="balance" value="${s.balance}" /></label>
+              <label class="st-field"><span>Leverage</span><select data-path="leverage">${[50, 100, 200, 500, 1000].map((l) => `<option value="${l}"${l === s.leverage ? ' selected' : ''}>1:${l}</option>`).join('')}</select></label>
+              <label class="st-field"><span>Komisi per lot $</span><input type="number" min="0" step="0.5" data-path="commission" value="${s.commission}" /></label>
+              <label class="st-field"><span>Slippage $</span><input type="number" min="0" step="0.01" data-path="slippage" value="${s.slippage}" /></label>
+            </div>
+            <label class="st-check"><input type="checkbox" data-path="reverse"${s.reverse ? ' checked' : ''} /> Sinyal lawan menutup posisi dan langsung membuka arah sebaliknya</label>
+            <p class="bt-hint">Jam mengikuti zona waktu chart. Contoh 14–23 WIB = sesi London + New York.</p>
+          </details>
         </section>
+
+        <div class="st-go">
+          <p class="st-err" data-err>${err ? esc(err) : ''}</p>
+          <button type="button" class="primary st-run" data-act="run">${this.running ? '■ Batal' : '▶ Jalankan backtest'}</button>
+          <span class="bt-muted">atau Ctrl+Enter</span>
+        </div>
       </div>`
   }
 
@@ -359,31 +497,57 @@ export class BacktestUI {
     }
     const sel = [...groups].map(([g, opts]) => `<optgroup label="${g}">${opts.join('')}</optgroup>`).join('')
     const params = SOURCES[o.src].params
-      .map((p, j) => `<input type="number" step="any" class="bt-num" data-path="${path}.p.${j}" value="${o.p[j]}" title="${esc(p.name)}" aria-label="${esc(SOURCES[o.src].label)} ${esc(p.name)}" />`)
+      .map(
+        (p, j) =>
+          `<label class="st-param"><small>${esc(p.name)}</small><input type="number" step="any" data-path="${path}.p.${j}" value="${o.p[j]}" aria-label="${esc(SOURCES[o.src].label)} ${esc(p.name)}" /></label>`,
+      )
       .join('')
-    return `<span class="bt-operand"><select data-src="${path}" aria-label="Sumber">${sel}</select>${params}</span>`
+    return `<span class="st-operand"><select data-src="${path}" aria-label="Indikator atau harga">${sel}</select>${params}</span>`
+  }
+
+  private condList(list: (typeof LISTS)[number][0]): string {
+    const ops = (cur: Op) => (Object.keys(OPS) as Op[]).map((k) => `<option value="${k}"${k === cur ? ' selected' : ''}>${OPS[k]}</option>`).join('')
+    return this.spec[list]
+      .map((c, i) => {
+        const p = `${list}.${i}`
+        return `<div class="st-cond">${i ? '<span class="st-and">dan</span>' : ''}
+          ${this.operandHtml(`${p}.a`, c.a)}
+          <select data-path="${p}.op" class="st-op" aria-label="Pembanding">${ops(c.op)}</select>
+          ${this.operandHtml(`${p}.b`, c.b)}
+          <button type="button" class="st-del" data-act="del" data-list="${list}" data-i="${i}" aria-label="Hapus kondisi" title="Hapus kondisi">✕</button></div>`
+      })
+      .join('')
   }
 
   private rulesHtml(): string {
     const s = this.spec
-    const groups = LISTS.map(([list, title]) => {
-      const rows = s[list]
-        .map((c, i) => {
-          const p = `${list}.${i}`
-          const ops = (Object.keys(OPS) as Op[]).map((k) => `<option value="${k}"${k === c.op ? ' selected' : ''}>${OPS[k]}</option>`).join('')
-          return `<div class="bt-cond">${this.operandHtml(`${p}.a`, c.a)}<select data-path="${p}.op" class="bt-opsel" aria-label="Pembanding">${ops}</select>${this.operandHtml(`${p}.b`, c.b)}
-            <button type="button" class="bt-del" data-act="del" data-list="${list}" data-i="${i}" aria-label="Hapus kondisi" title="Hapus">×</button></div>`
-        })
-        .join('')
-      return `<div class="bt-group"><h5>${title}</h5>${rows || '<p class="bt-muted">Belum ada kondisi.</p>'}
-        <button type="button" class="bt-add" data-act="add" data-list="${list}">+ Kondisi</button></div>`
-    })
-    return `<section class="bt-card bt-wide"><h4>Aturan</h4>${groups.join('')}
-      <p class="bt-hint">"Memotong ke atas" = candle sebelumnya di bawah/sama, candle ini di atas. Kalau buy dan sell muncul bersamaan, sinyal diabaikan.</p></section>`
+    const side = (list: 'long' | 'short', title: string, cls: string) => `
+      <div class="st-side ${cls}">
+        <h5>${title}</h5>
+        ${this.condList(list) || '<p class="bt-muted">Tidak pernah ' + (list === 'long' ? 'buy' : 'sell') + '.</p>'}
+        <div class="st-side-acts">
+          <button type="button" class="bt-add" data-act="add" data-list="${list}">+ Tambah syarat</button>
+          ${list === 'short' && s.long.length ? '<button type="button" class="bt-link" data-act="mirror" title="Isi syarat sell dengan kebalikan syarat buy">Salin kebalikan buy</button>' : ''}
+        </div>
+      </div>`
+    const exits = s.exitLong.length + s.exitShort.length > 0
+    return `
+      <section class="st-sec">
+        <h4><i>3</i> Kapan masuk</h4>
+        <div class="st-sides">${side('long', 'BUY kalau semua syarat ini benar', 'buy')}${side('short', 'SELL kalau semua syarat ini benar', 'sell')}</div>
+        <p class="bt-hint">Dicek tiap candle tutup, order masuk di open candle berikutnya. "Memotong ke atas" = candle sebelumnya di bawah, candle ini di atas.</p>
+        <details class="st-more"${exits ? ' open' : ''}>
+          <summary>Tutup posisi pakai sinyal (opsional, selain SL/TP)</summary>
+          <div class="st-sides">
+            <div class="st-side buy"><h5>Tutup BUY kalau</h5>${this.condList('exitLong') || '<p class="bt-muted">Hanya SL/TP.</p>'}<div class="st-side-acts"><button type="button" class="bt-add" data-act="add" data-list="exitLong">+ Tambah syarat</button></div></div>
+            <div class="st-side sell"><h5>Tutup SELL kalau</h5>${this.condList('exitShort') || '<p class="bt-muted">Hanya SL/TP.</p>'}<div class="st-side-acts"><button type="button" class="bt-add" data-act="add" data-list="exitShort">+ Tambah syarat</button></div></div>
+          </div>
+        </details>
+      </section>`
   }
 
   private codeHtml(): string {
-    return `<section class="bt-card bt-wide"><h4>Kode JavaScript <button type="button" class="bt-link" data-act="reset-code">kembalikan contoh</button></h4>
+    return `<section class="st-sec"><h4><i>3</i> Kode JavaScript <button type="button" class="bt-link" data-act="reset-code">kembalikan contoh</button></h4>
       <textarea class="bt-code" data-path="code" spellcheck="false" aria-label="Kode strategi">${esc(this.spec.code)}</textarea>
       <p class="bt-hint">Kode jalan di Web Worker, terpisah dari halaman. Jangan tempel kode dari orang yang tidak kamu percaya.</p></section>`
   }
@@ -448,6 +612,8 @@ export class BacktestUI {
     this.status.textContent = text
     this.runBtn.textContent = on ? '■ Batal' : '▶ Jalankan'
     this.runBtn.classList.toggle('primary', !on)
+    const sb = this.body.querySelector<HTMLButtonElement>('.st-run')
+    if (sb) sb.textContent = on ? '■ Batal' : '▶ Jalankan backtest'
     const ob = this.body.querySelector<HTMLButtonElement>('[data-act="optimize"]')
     if (ob) ob.disabled = on
   }

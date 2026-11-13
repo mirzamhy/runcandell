@@ -38,8 +38,16 @@ export interface DrawStyle {
   /** line width in px, 1–4 */
   width: number
   dash: Dash
-  /** text tool content (and optional label) */
+  /** text tool content, or a label on lines and boxes */
   text?: string
+  /** shapes: fill color (default = line color) and opacity 0-100 */
+  fill?: string
+  fillAlpha?: number
+  /** lines, boxes, fibs: run on to the chart edge */
+  extendL?: boolean
+  extendR?: boolean
+  /** text size in px */
+  fontSize?: number
 }
 
 /** A point in data space: t = UTC seconds (may be fractional / outside data), p = price. */
@@ -54,6 +62,18 @@ export interface Drawing {
   pts: Pt[]
   /** missing on drawings saved before styles existed: defaults apply */
   style?: DrawStyle
+  /** locked: can be selected, not moved */
+  locked?: boolean
+  hidden?: boolean
+  /** timeframes to show on; missing = all */
+  tfs?: string[]
+}
+
+/** Which style options make sense for a tool (style bar and settings dialog). */
+export const CAN = {
+  fill: (k: DrawKind) => k === 'rect' || k === 'ellipse' || k === 'channel',
+  extend: (k: DrawKind) => k === 'trend' || k === 'rect' || k === 'fib' || k === 'fibext',
+  label: (k: DrawKind) => k !== 'text' && k !== 'long' && k !== 'short' && k !== 'range',
 }
 
 export interface OHLC {
@@ -124,11 +144,13 @@ const MAGNET_PX = 14
 const FAR = 1e5
 
 type XY = { x: number; y: number }
-type Hit = { id: string; handle: number | null }
+/** A grab point: where it is on screen and what dragging it changes. */
+type Handle = { x: number; y: number; cursor: string; set: (pts: Pt[], pt: Pt) => void }
+type Hit = { id: string; handle: Handle | null }
 
 interface Drag {
   id: string
-  handle: number | null
+  handle: Handle | null
   startL: number
   startP: number
   orig: Pt[]
@@ -144,6 +166,15 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
   onChange: () => void = () => {}
   onToolChange: (t: Tool) => void = () => {}
   onSelect: (d: Drawing | null) => void = () => {}
+  /** double click on a drawing */
+  onOpen: (d: Drawing) => void = () => {}
+  /** hide every drawing (toolbar eye) */
+  hideAll = false
+  /** current timeframe, for per-timeframe visibility */
+  tf = ''
+  private past: string[] = []
+  private future: string[] = []
+  private snap = '[]'
 
   private chart!: IChartApi
   private series!: ISeriesApi<'Candlestick'>
@@ -196,7 +227,58 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
 
   load(list: Drawing[]) {
     this.drawings = list
+    this.snap = JSON.stringify(list)
+    this.past = []
+    this.future = []
     this.select(null)
+  }
+
+  setTF(tf: string) {
+    this.tf = tf
+    this.refresh()
+  }
+
+  isVisible(d: Drawing): boolean {
+    return !d.hidden && !this.hideAll && (!d.tfs || d.tfs.includes(this.tf))
+  }
+
+  /** change one drawing's flags or points from outside (object list, settings dialog) */
+  patch(id: string, fn: (d: Drawing) => void) {
+    const d = this.drawings.find((x) => x.id === id)
+    if (!d) return
+    fn(d)
+    if (!this.isVisible(d) && this.selected === id) this.select(null)
+    this.changed()
+  }
+
+  get canUndo() {
+    return this.past.length > 0
+  }
+  get canRedo() {
+    return this.future.length > 0
+  }
+
+  undo() {
+    const prev = this.past.pop()
+    if (prev === undefined) return
+    this.future.push(this.snap)
+    this.restore(prev)
+  }
+
+  redo() {
+    const next = this.future.pop()
+    if (next === undefined) return
+    this.past.push(this.snap)
+    this.restore(next)
+  }
+
+  private restore(json: string) {
+    this.snap = json
+    this.drawings = JSON.parse(json) as Drawing[]
+    if (!this.drawings.some((d) => d.id === this.selected)) this.selected = null
+    this.onSelect(this.selectedDrawing)
+    this.onChange()
+    this.refresh()
   }
 
   styleOf(d: Drawing): DrawStyle {
@@ -275,6 +357,14 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
   }
 
   private changed() {
+    // undo history: one step per finished change
+    const now = JSON.stringify(this.drawings)
+    if (now !== this.snap) {
+      this.past.push(this.snap)
+      if (this.past.length > 100) this.past.shift()
+      this.future = []
+      this.snap = now
+    }
     this.onChange()
     this.refresh()
   }
@@ -347,6 +437,20 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
     h.addEventListener('pointerdown', (e) => this.onDown(e), true)
     h.addEventListener('pointermove', (e) => this.onMove(e), true)
     h.addEventListener('pointerup', (e) => this.onUp(e), true)
+    h.addEventListener(
+      'dblclick',
+      (e) => {
+        if (this.tool !== 'cursor') return
+        const r = h.getBoundingClientRect()
+        const hit = this.findHit(e.clientX - r.left, e.clientY - r.top)
+        const d = hit && this.drawings.find((x) => x.id === hit.id)
+        if (!d) return
+        e.stopPropagation()
+        this.select(d.id)
+        this.onOpen(d)
+      },
+      true,
+    )
     const ctrl = (e: KeyboardEvent) => {
       // hold Ctrl to flip the magnet while drawing (TradingView habit)
       const on = e.ctrlKey || e.metaKey
@@ -362,6 +466,13 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
         else if (this.selected) this.select(null)
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         this.removeSelected()
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault()
+        if (e.shiftKey) this.redo()
+        else this.undo()
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault()
+        this.redo()
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd' && this.selected) {
         e.preventDefault()
         this.duplicate()
@@ -406,6 +517,7 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
     this.block(e)
     if (this.selected !== hit.id) this.select(hit.id)
     const d = this.drawings.find((dd) => dd.id === hit.id)!
+    if (d.locked) return
     const l = this.chart.timeScale().coordinateToLogical(x) ?? 0
     const p = this.series.coordinateToPrice(y) ?? pt.p
     this.drag = { id: hit.id, handle: hit.handle, startL: l, startP: p, orig: d.pts.map((q) => ({ ...q })) }
@@ -432,12 +544,9 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
       if (g.handle !== null) {
         const pt = this.toPt(x, y)
         if (!pt) return
-        d.pts[g.handle] = pt
-        if (d.kind === 'long' || d.kind === 'short') {
-          // target and stop share the end time; the stop handle only moves the price
-          if (g.handle === 1) d.pts[2] = { t: pt.t, p: d.pts[2].p }
-          if (g.handle === 2) d.pts[2] = { t: d.pts[1].t, p: pt.p }
-        }
+        const pts = g.orig.map((q) => ({ ...q }))
+        g.handle.set(pts, pt)
+        d.pts = pts
       } else {
         const l = this.chart.timeScale().coordinateToLogical(x)
         const p = this.series.coordinateToPrice(y)
@@ -451,7 +560,8 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
     }
     if (this.tool === 'cursor' && this.inMainPane(y, x)) {
       const hit = this.findHit(x, y)
-      this.host.style.cursor = hit ? (hit.handle !== null ? 'grab' : 'move') : ''
+      const locked = hit && this.drawings.find((dd) => dd.id === hit.id)?.locked
+      this.host.style.cursor = !hit ? '' : locked ? 'pointer' : hit.handle ? hit.handle.cursor : 'move'
     }
   }
 
@@ -507,7 +617,10 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
   private segments(d: Drawing, s: XY[], w: number, h: number): [XY, XY][] {
     const [a, b] = s
     switch (d.kind) {
-      case 'trend':
+      case 'trend': {
+        const st = this.styleOf(d)
+        return [[st.extendL ? extend(b, a) : a, st.extendR ? extend(a, b) : b]]
+      }
       case 'arrow':
         return [[a, b]]
       case 'ray':
@@ -534,20 +647,96 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
     }
   }
 
+  // ---- handles ----
+
+  /**
+   * Grab points of a drawing. Boxes get all four corners and the four edge middles
+   * (an edge moves one side only), like TradingView.
+   */
+  private handles(d: Drawing, s: XY[]): Handle[] {
+    const pt = (i: number): Handle => ({ x: s[i].x, y: s[i].y, cursor: 'grab', set: (p, q) => (p[i] = q) })
+    switch (d.kind) {
+      case 'hline':
+      case 'vline':
+      case 'cross':
+      case 'text':
+        return []
+      case 'hray':
+        return [pt(0)]
+      case 'rect':
+      case 'ellipse':
+      case 'range': {
+        if (s.length < 2) return []
+        const [a, b] = s
+        const mx = (a.x + b.x) / 2
+        const my = (a.y + b.y) / 2
+        // which corner is top-left on screen decides the resize cursors
+        const diag = a.x < b.x === a.y < b.y ? 'nwse-resize' : 'nesw-resize'
+        const anti = diag === 'nwse-resize' ? 'nesw-resize' : 'nwse-resize'
+        return [
+          { x: a.x, y: a.y, cursor: diag, set: (p, q) => (p[0] = q) },
+          { x: b.x, y: b.y, cursor: diag, set: (p, q) => (p[1] = q) },
+          { x: b.x, y: a.y, cursor: anti, set: (p, q) => ((p[1].t = q.t), (p[0].p = q.p)) },
+          { x: a.x, y: b.y, cursor: anti, set: (p, q) => ((p[0].t = q.t), (p[1].p = q.p)) },
+          { x: mx, y: a.y, cursor: 'ns-resize', set: (p, q) => (p[0].p = q.p) },
+          { x: mx, y: b.y, cursor: 'ns-resize', set: (p, q) => (p[1].p = q.p) },
+          { x: a.x, y: my, cursor: 'ew-resize', set: (p, q) => (p[0].t = q.t) },
+          { x: b.x, y: my, cursor: 'ew-resize', set: (p, q) => (p[1].t = q.t) },
+        ]
+      }
+      case 'channel': {
+        if (s.length < 3) return s.map((_, i) => pt(i))
+        const off = this.channelOffset(s)
+        const [a, b] = s
+        // the second rail: any point on it sets the channel width
+        const rail = (x: number, y: number): Handle => ({ x, y, cursor: 'ns-resize', set: (p, q) => (p[2] = q) })
+        return [pt(0), pt(1), rail(a.x, a.y + off), rail(b.x, b.y + off), rail((a.x + b.x) / 2, (a.y + b.y) / 2 + off)]
+      }
+      case 'long':
+      case 'short': {
+        if (s.length < 2) return []
+        const ys = d.pts[2] ? this.y(d.pts[2].p) : null
+        const x0 = Math.min(s[0].x, s[1].x)
+        const x1 = Math.max(s[0].x, s[1].x, x0 + 40)
+        const out: Handle[] = [
+          // entry: moves the trade start (time and price)
+          { x: s[0].x, y: s[0].y, cursor: 'grab', set: (p, q) => (p[0] = q) },
+          // target: price only
+          { x: x0, y: s[1].y, cursor: 'ns-resize', set: (p, q) => (p[1] = { t: p[1].t, p: q.p }) },
+          // right edge: how long the idea lasts
+          {
+            x: x1,
+            y: s[0].y,
+            cursor: 'ew-resize',
+            set: (p, q) => {
+              p[1] = { t: q.t, p: p[1].p }
+              if (p[2]) p[2] = { t: q.t, p: p[2].p }
+            },
+          },
+        ]
+        if (ys !== null) out.push({ x: x0, y: ys, cursor: 'ns-resize', set: (p, q) => (p[2] = { t: p[1].t, p: q.p }) })
+        return out
+      }
+      default:
+        return s.map((_, i) => pt(i))
+    }
+  }
+
   // ---- hit testing ----
 
   private findHit(x: number, y: number): Hit | null {
     const w = this.chart.timeScale().width()
     const h = this.chart.panes()[0].getHeight()
-    for (let i = this.drawings.length - 1; i >= 0; i--) {
+    // the selected drawing comes first, so a small box inside a big one stays resizable
+    const order = [...this.drawings.keys()].reverse()
+    const sel = this.drawings.findIndex((d) => d.id === this.selected)
+    if (sel >= 0) order.unshift(sel)
+    for (const i of order) {
       const d = this.drawings[i]
+      if (!this.isVisible(d)) continue
       const s = this.screenPts(d)
       if (!s) continue
-      if (!['hline', 'vline', 'cross'].includes(d.kind)) {
-        for (let k = 0; k < s.length; k++) {
-          if (Math.hypot(s[k].x - x, s[k].y - y) <= HANDLE_R + 3) return { id: d.id, handle: k }
-        }
-      }
+      if (!d.locked) for (const hd of this.handles(d, s)) if (Math.hypot(hd.x - x, hd.y - y) <= HANDLE_R + 3) return { id: d.id, handle: hd }
       if (this.hitBody(d, s, x, y, w, h)) return { id: d.id, handle: null }
     }
     return null
@@ -567,7 +756,11 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
       return x >= x0 - HIT_PX && x <= x1 + HIT_PX && y >= y0 - HIT_PX && y <= y1 + HIT_PX
     }
     switch (d.kind) {
-      case 'rect':
+      case 'rect': {
+        const st = this.styleOf(d)
+        const [l, r] = s[0].x <= s[1].x ? [s[0], s[1]] : [s[1], s[0]]
+        return box(st.extendL ? { x: 0, y: l.y } : l, st.extendR ? { x: w, y: r.y } : r)
+      }
       case 'range':
         return box(s[0], s[1])
       case 'ellipse': {
@@ -599,7 +792,7 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
 
   private textBox(d: Drawing, a: XY) {
     const st = this.styleOf(d)
-    const size = 10 + st.width * 2
+    const size = st.fontSize ?? 10 + st.width * 2
     const lines = (st.text || ' ').split('\n')
     // rough width without a context: ~0.6em per char
     const w = Math.max(...lines.map((l) => l.length)) * size * 0.6
@@ -608,9 +801,11 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
 
   private fibLines(d: Drawing, s: XY[]) {
     const out: { lv: number; price: number; y: number; x0: number; x1: number }[] = []
+    const st = this.styleOf(d)
+    const W = this.chart.timeScale().width()
+    const ext = (x0: number, x1: number) => [st.extendL ? 0 : x0, st.extendR ? W : x1] as const
     if (d.kind === 'fib') {
-      const x0 = Math.min(s[0].x, s[1].x)
-      const x1 = Math.max(s[0].x, s[1].x)
+      const [x0, x1] = ext(Math.min(s[0].x, s[1].x), Math.max(s[0].x, s[1].x))
       for (const lv of FIB_LEVELS) {
         const price = d.pts[1].p + (d.pts[0].p - d.pts[1].p) * lv
         const y = this.y(price)
@@ -618,8 +813,7 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
       }
     } else if (d.pts.length >= 3) {
       const move = d.pts[1].p - d.pts[0].p
-      const x0 = s[2].x
-      const x1 = Math.max(s[1].x, s[2].x) + Math.max(60, Math.abs(s[2].x - s[1].x))
+      const [x0, x1] = ext(s[2].x, Math.max(s[1].x, s[2].x) + Math.max(60, Math.abs(s[2].x - s[1].x)))
       for (const lv of FIBEXT_LEVELS) {
         const price = d.pts[2].p + move * lv
         const y = this.y(price)
@@ -632,7 +826,7 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
   // ---- painting ----
 
   private paint(ctx: CanvasRenderingContext2D, width: number, height: number) {
-    for (const d of this.drawings) this.paintOne(ctx, d, width, height, d.id === this.selected)
+    for (const d of this.drawings) if (this.isVisible(d)) this.paintOne(ctx, d, width, height, d.id === this.selected)
     if (this.draft) this.paintOne(ctx, this.draft, width, height, true)
   }
 
@@ -648,6 +842,8 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
     ctx.fillStyle = color
     ctx.setLineDash(st.dash === 'dash' ? [7, 4] : st.dash === 'dot' ? [2, 3] : [])
     ctx.font = '11px ui-sans-serif, system-ui, sans-serif'
+    const fill = st.fill ?? color
+    const fillA = (st.fillAlpha ?? 15) / 100
     const label = (text: string, x: number, y: number, bg = color, fg = '#0b0e14') => {
       ctx.save()
       ctx.setLineDash([])
@@ -682,9 +878,12 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
         label(t, width - ctx.measureText(t).width - 14, y)
         break
       }
-      case 'trend':
-        line(ctx, s[0].x, s[0].y, s[1].x, s[1].y)
+      case 'trend': {
+        const a = st.extendL ? extend(s[1], s[0]) : s[0]
+        const b = st.extendR ? extend(s[0], s[1]) : s[1]
+        line(ctx, a.x, a.y, b.x, b.y)
         break
+      }
       case 'ray': {
         const e = extend(s[0], s[1])
         line(ctx, s[0].x, s[0].y, e.x, e.y)
@@ -715,7 +914,8 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
         if (s.length >= 3) {
           const off = this.channelOffset(s)
           line(ctx, a.x, a.y + off, b.x, b.y + off)
-          ctx.globalAlpha = 0.1
+          ctx.fillStyle = fill
+          ctx.globalAlpha = fillA
           ctx.beginPath()
           ctx.moveTo(a.x, a.y)
           ctx.lineTo(b.x, b.y)
@@ -730,14 +930,15 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
         break
       }
       case 'rect': {
-        const x0 = Math.min(s[0].x, s[1].x)
+        const x0 = st.extendL ? 0 : Math.min(s[0].x, s[1].x)
+        const x1 = st.extendR ? width : Math.max(s[0].x, s[1].x)
         const y0 = Math.min(s[0].y, s[1].y)
-        const w = Math.abs(s[1].x - s[0].x)
         const h = Math.abs(s[1].y - s[0].y)
-        ctx.globalAlpha = 0.15
-        ctx.fillRect(x0, y0, w, h)
+        ctx.fillStyle = fill
+        ctx.globalAlpha = fillA
+        ctx.fillRect(x0, y0, x1 - x0, h)
         ctx.globalAlpha = 1
-        ctx.strokeRect(x0, y0, w, h)
+        ctx.strokeRect(x0, y0, x1 - x0, h)
         break
       }
       case 'ellipse': {
@@ -745,7 +946,8 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
         const cy = (s[0].y + s[1].y) / 2
         ctx.beginPath()
         ctx.ellipse(cx, cy, Math.abs(s[1].x - s[0].x) / 2, Math.abs(s[1].y - s[0].y) / 2, 0, 0, Math.PI * 2)
-        ctx.globalAlpha = 0.12
+        ctx.fillStyle = fill
+        ctx.globalAlpha = fillA
         ctx.fill()
         ctx.globalAlpha = 1
         ctx.stroke()
@@ -809,15 +1011,51 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
       }
     }
 
-    if (selected && !['hline', 'vline', 'cross', 'text'].includes(d.kind)) {
+    // optional label on lines and boxes
+    if (st.text && CAN.label(d.kind)) {
+      ctx.save()
       ctx.setLineDash([])
-      for (const p of s) {
+      ctx.globalAlpha = 1
+      ctx.fillStyle = color
+      ctx.font = `600 ${st.fontSize ?? 12}px ui-sans-serif, system-ui, sans-serif`
+      ctx.textBaseline = 'bottom'
+      const a = s[0]
+      const b = s[1] ?? s[0]
+      if (d.kind === 'rect' || d.kind === 'ellipse' || d.kind === 'channel') {
+        ctx.textBaseline = 'top'
+        ctx.fillText(st.text, Math.min(a.x, b.x) + 6, Math.min(a.y, b.y) + 4)
+      } else if (d.kind === 'hline' || d.kind === 'hray' || d.kind === 'cross') {
+        ctx.fillText(st.text, (d.kind === 'hray' ? a.x : 0) + 8, a.y - 3)
+      } else if (d.kind === 'vline') {
+        ctx.fillText(st.text, a.x + 4, 16)
+      } else {
+        ctx.textAlign = 'center'
+        ctx.fillText(st.text, (a.x + b.x) / 2, (a.y + b.y) / 2 - 5)
+      }
+      ctx.restore()
+    }
+
+    if (selected) {
+      ctx.setLineDash([])
+      ctx.globalAlpha = 1
+      for (const p of d.locked ? [] : this.handles(d, s)) {
         ctx.beginPath()
-        ctx.arc(p.x, p.y, HANDLE_R, 0, Math.PI * 2)
+        ctx.arc(p.x, p.y, p.cursor === 'grab' ? HANDLE_R : HANDLE_R - 1, 0, Math.PI * 2)
         ctx.fillStyle = '#0b0e14'
         ctx.fill()
         ctx.lineWidth = 1.5
         ctx.strokeStyle = color
+        ctx.stroke()
+      }
+      if (d.locked) {
+        // padlock badge next to the first point
+        const p = s[0]
+        ctx.fillStyle = color
+        ctx.fillRect(p.x + 6, p.y - 12, 8, 6)
+        ctx.strokeStyle = color
+        ctx.lineWidth = 1.5
+        ctx.beginPath()
+        ctx.arc(p.x + 10, p.y - 12, 3, Math.PI, 0)
         ctx.stroke()
       }
     }

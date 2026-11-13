@@ -2,9 +2,17 @@
  * Drawing UI around DrawingLayer: the left toolbar (tool groups with flyouts, magnet),
  * and the floating style bar for the selected drawing (color, width, line style, text).
  */
-import { DEFAULT_STYLE, TOOL_LABEL, type Dash, type DrawingLayer, type DrawKind, type DrawStyle, type Magnet, type Tool } from './drawings'
+import { CAN, DEFAULT_STYLE, TOOL_LABEL, type Dash, type Drawing, type DrawingLayer, type DrawKind, type DrawStyle, type Magnet, type Tool } from './drawings'
 
-const ICON: Record<Tool | 'magnet' | 'delete' | 'clear' | 'copy', string> = {
+const ICON: Record<Tool | 'magnet' | 'delete' | 'clear' | 'copy' | 'undo' | 'redo' | 'eye' | 'eyeoff' | 'lock' | 'unlock' | 'list' | 'gear', string> = {
+  undo: '<path d="M7 5L3 9l4 4"/><path d="M3 9h9a5 5 0 0 1 0 10H9"/>',
+  redo: '<path d="M13 5l4 4-4 4"/><path d="M17 9H8a5 5 0 0 0 0 10h3"/>',
+  eye: '<path d="M2 10s3-6 8-6 8 6 8 6-3 6-8 6-8-6-8-6z"/><circle cx="10" cy="10" r="2.5"/>',
+  eyeoff: '<path d="M2 10s3-6 8-6 8 6 8 6-3 6-8 6-8-6-8-6z"/><path d="M3 3l14 14"/>',
+  lock: '<rect x="4.5" y="9" width="11" height="8" rx="1"/><path d="M7 9V6.5a3 3 0 0 1 6 0V9"/>',
+  unlock: '<rect x="4.5" y="9" width="11" height="8" rx="1"/><path d="M7 9V6.5a3 3 0 0 1 5.8-1"/>',
+  list: '<path d="M7 5h10M7 10h10M7 15h10"/><circle cx="3.5" cy="5" r="1"/><circle cx="3.5" cy="10" r="1"/><circle cx="3.5" cy="15" r="1"/>',
+  gear: '<circle cx="10" cy="10" r="2.6"/><path d="M10 2.5v2.2M10 15.3v2.2M2.5 10h2.2M15.3 10h2.2M4.7 4.7l1.6 1.6M13.7 13.7l1.6 1.6M4.7 15.3l1.6-1.6M13.7 6.3l1.6-1.6"/>',
   cursor: '<path class="solid" d="M5 3l10 6-4.5 1.2L13 15l-1.8.9-2.4-4.8L5 14z"/>',
   trend: '<path d="M4 16L16 4"/><circle cx="4" cy="16" r="1.8"/><circle cx="16" cy="4" r="1.8"/>',
   ray: '<path d="M4 16L18 2"/><circle cx="4" cy="16" r="1.8"/><circle cx="10" cy="10" r="1.8"/>',
@@ -42,7 +50,22 @@ const GROUPS: { name: string; tools: Tool[] }[] = [
 const MAGNET_NEXT: Record<Magnet, Magnet> = { off: 'weak', weak: 'strong', strong: 'off' }
 const MAGNET_LABEL: Record<Magnet, string> = { off: 'Magnet mati', weak: 'Magnet lemah', strong: 'Magnet kuat' }
 const COLORS = ['#4c8dff', '#2ec4b6', '#26a69a', '#f5a524', '#ef5350', '#a78bfa', '#e6e9ef', '#9aa4b2']
-const KEY = { magnet: 'rc.v1.magnet', styles: 'rc.v1.drawStyles', groups: 'rc.v1.toolGroups' }
+const KEY = { magnet: 'rc.v1.magnet', styles: 'rc.v1.drawStyles', groups: 'rc.v1.toolGroups', hideAll: 'rc.v1.drawHideAll' }
+const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
+/** names for the points of each tool in the coordinates list */
+const PT_NAMES: Partial<Record<DrawKind, string[]>> = {
+  long: ['Entry', 'Target', 'Stop'],
+  short: ['Entry', 'Target', 'Stop'],
+  channel: ['Awal', 'Akhir', 'Lebar'],
+  fibext: ['Titik 1', 'Titik 2', 'Titik 3'],
+}
+
+export interface DrawToolsOptions {
+  /** UTC seconds to a datetime-local value in the chart's zone, and back */
+  toInput: (t: number) => string
+  fromInput: (v: string) => number | null
+  timeframes: readonly string[]
+}
 
 function read<T>(k: string, fallback: T): T {
   try {
@@ -70,10 +93,23 @@ export class DrawTools {
   /** last tool picked in each group (the group button shows it) */
   private current: Record<string, Tool>
   private magnetBtn!: HTMLButtonElement
+  private undoBtn!: HTMLButtonElement
+  private redoBtn!: HTMLButtonElement
+  private eyeBtn!: HTMLButtonElement
+  private listBtn!: HTMLButtonElement
+  private readonly tree: HTMLElement
+  private readonly dlg: HTMLDialogElement
+  private dlgBefore: Drawing | null = null
 
-  constructor(nav: HTMLElement, chartWrap: HTMLElement, layer: DrawingLayer) {
+  constructor(
+    nav: HTMLElement,
+    chartWrap: HTMLElement,
+    layer: DrawingLayer,
+    private readonly opts: DrawToolsOptions,
+  ) {
     this.nav = nav
     this.layer = layer
+    layer.hideAll = read<boolean>(KEY.hideAll, false)
     layer.magnet = read<Magnet>(KEY.magnet, 'off')
     layer.styles = read<Partial<Record<DrawKind, DrawStyle>>>(KEY.styles, {})
     this.current = { ...Object.fromEntries(GROUPS.map((g) => [g.name, g.tools[0]])), ...read<Record<string, Tool>>(KEY.groups, {}) }
@@ -91,13 +127,32 @@ export class DrawTools {
     this.bar.setAttribute('aria-label', 'Gaya gambar')
     chartWrap.append(this.bar)
 
+    this.tree = document.createElement('aside')
+    this.tree.className = 'obj-tree'
+    this.tree.hidden = true
+    this.tree.setAttribute('aria-label', 'Daftar gambar')
+    chartWrap.append(this.tree)
+    this.tree.addEventListener('click', (e) => this.onTreeClick(e))
+
+    this.dlg = document.createElement('dialog')
+    this.dlg.className = 'cs-dialog dd-dialog'
+    document.body.append(this.dlg)
+    this.dlg.addEventListener('input', (e) => this.onDlgInput(e))
+    this.dlg.addEventListener('change', (e) => this.onDlgInput(e))
+    this.dlg.addEventListener('click', (e) => this.onDlgClick(e))
+    this.dlg.addEventListener('cancel', () => this.dlgRestore())
+    layer.onOpen = (d) => this.openSettings(d.id)
+
     this.buildNav()
     layer.onToolChange = () => this.syncNav()
-    layer.onSelect = (d) => this.renderBar(d ? d.id : null)
+    layer.onSelect = (d) => {
+      this.renderBar(d ? d.id : null)
+      this.renderTree()
+    }
     const prevChange = layer.onChange
     layer.onChange = () => {
       prevChange()
-      write(KEY.styles, layer.styles)
+      this.afterChange()
     }
     this.syncNav()
 
@@ -118,8 +173,16 @@ export class DrawTools {
   rebindChange(fn: () => void) {
     this.layer.onChange = () => {
       fn()
-      write(KEY.styles, this.layer.styles)
+      this.afterChange()
     }
+  }
+
+  private afterChange() {
+    write(KEY.styles, this.layer.styles)
+    this.syncNav()
+    this.renderTree()
+    // the bar shows lock state and the label: keep it current after undo or the list
+    if (this.layer.selected && !this.bar.contains(document.activeElement)) this.renderBar(this.layer.selected)
   }
 
   cycleMagnet() {
@@ -166,7 +229,27 @@ export class DrawTools {
     this.magnetBtn = this.button('magnet', '', () => this.cycleMagnet())
     this.magnetBtn.classList.add('magnet')
     n.append(this.magnetBtn, sep())
+    this.undoBtn = this.button('undo', 'Batalkan (Ctrl+Z)', () => this.layer.undo())
+    this.redoBtn = this.button('redo', 'Ulangi (Ctrl+Y)', () => this.layer.redo())
+    this.eyeBtn = this.button('eye', '', () => {
+      this.layer.hideAll = !this.layer.hideAll
+      write(KEY.hideAll, this.layer.hideAll)
+      if (this.layer.hideAll) this.layer.select(null)
+      this.layer.refresh()
+      this.syncNav()
+      this.renderTree()
+    })
+    this.listBtn = this.button('list', 'Daftar gambar: sembunyikan, kunci, hapus satu per satu', () => {
+      this.tree.hidden = !this.tree.hidden
+      this.renderTree()
+      this.syncNav()
+    })
     n.append(
+      this.undoBtn,
+      this.redoBtn,
+      sep(),
+      this.listBtn,
+      this.eyeBtn,
       this.button('delete', 'Hapus gambar terpilih (Delete)', () => this.layer.removeSelected()),
       this.button('clear', 'Hapus semua gambar', () => {
         if (this.layer.drawings.length && confirm('Hapus semua gambar di chart?')) this.layer.clear()
@@ -221,6 +304,188 @@ export class DrawTools {
     this.magnetBtn.dataset.mode = m
     this.magnetBtn.title = `${MAGNET_LABEL[m]} (klik untuk ganti, tahan Ctrl saat menggambar untuk membalik)`
     this.magnetBtn.setAttribute('aria-label', MAGNET_LABEL[m])
+    this.undoBtn.disabled = !this.layer.canUndo
+    this.redoBtn.disabled = !this.layer.canRedo
+    const hid = this.layer.hideAll
+    this.eyeBtn.innerHTML = svg(hid ? 'eyeoff' : 'eye')
+    this.eyeBtn.title = hid ? 'Tampilkan semua gambar' : 'Sembunyikan semua gambar'
+    this.eyeBtn.setAttribute('aria-label', this.eyeBtn.title)
+    this.eyeBtn.setAttribute('aria-pressed', String(hid))
+    this.listBtn.setAttribute('aria-pressed', String(!this.tree.hidden))
+  }
+
+  // ---------- object list ----------
+
+  private describe(d: Drawing): string {
+    const px = (p: number) => p.toFixed(2)
+    const st = this.layer.styleOf(d)
+    if (d.kind === 'text') return st.text || 'Teks'
+    if (st.text) return st.text
+    if (d.kind === 'vline') return this.opts.toInput(d.pts[0].t).replace('T', ' ')
+    if (d.pts.length === 1) return px(d.pts[0].p)
+    return `${px(d.pts[0].p)} → ${px(d.pts[1].p)}`
+  }
+
+  private renderTree() {
+    if (this.tree.hidden) return
+    const list = [...this.layer.drawings].reverse()
+    const row = (d: Drawing) => {
+      const tfNote = d.tfs ? ` <small>(${d.tfs.length} TF)</small>` : ''
+      return `<li class="${d.id === this.layer.selected ? 'sel' : ''}${d.hidden ? ' off' : ''}" data-id="${d.id}">
+        <i style="color:${this.layer.styleOf(d).color}">${svg(d.kind)}</i>
+        <button type="button" class="ot-name" data-ot="select">${TOOL_LABEL[d.kind]}<small>${esc(this.describe(d))}</small>${tfNote}</button>
+        <button type="button" data-ot="hide" title="${d.hidden ? 'Tampilkan' : 'Sembunyikan'}" aria-label="${d.hidden ? 'Tampilkan' : 'Sembunyikan'}">${svg(d.hidden ? 'eyeoff' : 'eye')}</button>
+        <button type="button" data-ot="lock" title="${d.locked ? 'Buka kunci' : 'Kunci'}" aria-label="${d.locked ? 'Buka kunci' : 'Kunci'}" aria-pressed="${!!d.locked}">${svg(d.locked ? 'lock' : 'unlock')}</button>
+        <button type="button" data-ot="delete" title="Hapus" aria-label="Hapus">${svg('delete')}</button>
+      </li>`
+    }
+    this.tree.innerHTML = `
+      <header><b>Gambar (${list.length})</b>
+        <button type="button" data-ot="lockall" title="Kunci / buka semua">${svg('lock')}</button>
+        <button type="button" data-ot="close" aria-label="Tutup daftar">✕</button></header>
+      ${this.layer.hideAll ? '<p class="ot-note">Semua gambar sedang disembunyikan (ikon mata di toolbar).</p>' : ''}
+      ${list.length ? `<ul>${list.map(row).join('')}</ul>` : '<p class="ot-note">Belum ada gambar. Pilih alat di toolbar kiri.</p>'}
+      <p class="ot-note">Klik dua kali gambar di chart untuk pengaturan lengkap: koordinat, isi, label, timeframe.</p>`
+  }
+
+  private onTreeClick(e: Event) {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-ot]')
+    if (!b) return
+    const a = b.dataset.ot
+    if (a === 'close') {
+      this.tree.hidden = true
+      return this.syncNav()
+    }
+    if (a === 'lockall') {
+      const lock = this.layer.drawings.some((d) => !d.locked)
+      for (const d of this.layer.drawings) this.layer.patch(d.id, (x) => (x.locked = lock || undefined))
+      return
+    }
+    const id = b.closest<HTMLElement>('[data-id]')?.dataset.id
+    if (!id) return
+    if (a === 'select') {
+      const d = this.layer.drawings.find((x) => x.id === id)
+      if (d && this.layer.isVisible(d)) this.layer.select(id)
+      return
+    }
+    if (a === 'hide') return this.layer.patch(id, (d) => (d.hidden = !d.hidden || undefined))
+    if (a === 'lock') return this.layer.patch(id, (d) => (d.locked = !d.locked || undefined))
+    if (a === 'delete') {
+      this.layer.select(id)
+      this.layer.removeSelected()
+    }
+  }
+
+  // ---------- settings dialog (double click a drawing) ----------
+
+  openSettings(id: string) {
+    const d = this.layer.drawings.find((x) => x.id === id)
+    if (!d) return
+    this.dlgBefore = structuredClone(d)
+    this.dlg.dataset.id = id
+    this.renderDlg(d)
+    this.dlg.showModal()
+  }
+
+  private renderDlg(d: Drawing) {
+    const st = this.layer.styleOf(d)
+    const k = d.kind
+    const names = PT_NAMES[k] ?? d.pts.map((_, i) => `Titik ${i + 1}`)
+    const sel = (key: string, cur: string | number, opts: [string | number, string][]) =>
+      `<select data-st="${key}">${opts.map(([v, l]) => `<option value="${v}"${String(v) === String(cur) ? ' selected' : ''}>${l}</option>`).join('')}</select>`
+    const row = (label: string, ctl: string) => `<div class="cs-row"><span>${label}</span><div class="cs-ctl">${ctl}</div></div>`
+    const style = [
+      row('Warna garis', `<input type="color" data-st="color" value="${st.color}">`),
+      k === 'text' ? '' : row('Tebal', sel('width', st.width, [1, 2, 3, 4].map((w) => [w, `${w}px`]))),
+      k === 'text' ? '' : row('Jenis garis', sel('dash', st.dash, [['solid', 'Penuh'], ['dash', 'Putus-putus'], ['dot', 'Titik-titik']])),
+      CAN.fill(k)
+        ? row('Isi', `<input type="color" data-st="fill" value="${st.fill ?? st.color}"><input type="range" min="0" max="80" data-st="fillAlpha" value="${st.fillAlpha ?? 15}" aria-label="Tebal isi"><output>${st.fillAlpha ?? 15}%</output>`)
+        : '',
+      CAN.extend(k)
+        ? row('Perpanjang', `<label class="cs-null"><input type="checkbox" data-st="extendL"${st.extendL ? ' checked' : ''}> ke kiri</label><label class="cs-null"><input type="checkbox" data-st="extendR"${st.extendR ? ' checked' : ''}> ke kanan</label>`)
+        : '',
+    ].join('')
+    const text =
+      k === 'text'
+        ? `<textarea data-st="text" rows="3">${esc(st.text ?? '')}</textarea>${row('Ukuran teks', sel('fontSize', st.fontSize ?? 10 + st.width * 2, [10, 12, 14, 16, 20, 24, 32].map((v) => [v, `${v}px`])))}`
+        : CAN.label(k)
+          ? `<input type="text" data-st="text" maxlength="80" placeholder="Contoh: Support kuat, Zona supply" value="${esc(st.text ?? '')}">${row('Ukuran label', sel('fontSize', st.fontSize ?? 12, [10, 12, 14, 16, 20].map((v) => [v, `${v}px`])))}`
+          : ''
+    const coords = d.pts
+      .map(
+        (p, i) => `<div class="dd-pt"><b>${names[i] ?? `Titik ${i + 1}`}</b>
+          <label>Harga <input type="number" step="0.01" data-pt="${i}" data-f="p" value="${p.p.toFixed(2)}"></label>
+          ${k === 'hline' ? '' : `<label>Waktu <input type="datetime-local" data-pt="${i}" data-f="t" value="${this.opts.toInput(p.t)}"></label>`}</div>`,
+      )
+      .join('')
+    const all = !d.tfs
+    const tfs = this.opts.timeframes
+      .map((tf) => `<label class="cs-null"><input type="checkbox" data-tf="${tf}"${all || d.tfs!.includes(tf) ? ' checked' : ''}> ${tf}</label>`)
+      .join('')
+    this.dlg.innerHTML = `
+      <header class="cs-head"><b>${TOOL_LABEL[k]}</b><button type="button" data-dd="cancel" aria-label="Tutup">✕</button></header>
+      <div class="dd-body">
+        <section><h5>Gaya</h5>${style}</section>
+        ${text ? `<section><h5>${k === 'text' ? 'Teks' : 'Label'}</h5>${text}</section>` : ''}
+        <section><h5>Koordinat</h5>${coords}</section>
+        <section><h5>Tampil di timeframe</h5><div class="dd-tfs">${tfs}</div>
+          <label class="cs-null"><input type="checkbox" data-st="locked"${d.locked ? ' checked' : ''}> Kunci posisi (tidak bisa tergeser)</label></section>
+      </div>
+      <footer class="cs-foot"><button type="button" data-dd="delete" class="danger">Hapus</button><span></span>
+        <button type="button" data-dd="cancel">Batal</button><button type="button" class="primary" data-dd="ok">OK</button></footer>`
+  }
+
+  private dlgRestore() {
+    const b = this.dlgBefore
+    if (!b) return
+    this.layer.patch(b.id, (d) => Object.assign(d, structuredClone(b), { locked: b.locked, hidden: b.hidden, tfs: b.tfs }))
+    this.dlgBefore = null
+  }
+
+  private onDlgClick(e: Event) {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('[data-dd]')
+    if (!b) return
+    const a = b.dataset.dd
+    if (a === 'cancel') this.dlgRestore()
+    if (a === 'delete') {
+      this.layer.select(this.dlg.dataset.id!)
+      this.layer.removeSelected()
+    }
+    this.dlgBefore = null
+    this.dlg.close()
+  }
+
+  private onDlgInput(e: Event) {
+    const el = e.target as HTMLInputElement
+    const id = this.dlg.dataset.id!
+    if (el.dataset.pt) {
+      const i = +el.dataset.pt
+      if (el.dataset.f === 'p') {
+        const v = parseFloat(el.value)
+        if (Number.isFinite(v)) this.layer.patch(id, (d) => (d.pts[i] = { ...d.pts[i], p: v }))
+      } else if (e.type === 'change') {
+        const t = this.opts.fromInput(el.value)
+        if (t !== null) this.layer.patch(id, (d) => (d.pts[i] = { ...d.pts[i], t }))
+      }
+      return
+    }
+    if (el.dataset.tf) {
+      const on = [...this.dlg.querySelectorAll<HTMLInputElement>('[data-tf]')].filter((c) => c.checked).map((c) => c.dataset.tf!)
+      this.layer.patch(id, (d) => (d.tfs = on.length === this.opts.timeframes.length ? undefined : on))
+      return
+    }
+    const key = el.dataset.st
+    if (!key) return
+    if (key === 'locked') return this.layer.patch(id, (d) => (d.locked = el.checked || undefined))
+    let v: string | number | boolean = el.value
+    if (el.type === 'checkbox') v = el.checked
+    else if (key === 'width' || key === 'fontSize' || key === 'fillAlpha') v = Number(el.value)
+    if (key === 'fillAlpha') {
+      const out = el.nextElementSibling
+      if (out) out.textContent = `${v}%`
+    }
+    this.layer.select(id)
+    this.layer.setStyle({ [key]: v } as Partial<DrawStyle>)
   }
 
   // ---------- style bar ----------
@@ -242,8 +507,11 @@ export class DrawTools {
       <span class="db-widths">${[1, 2, 3, 4].map((w) => `<button type="button" data-width="${w}" aria-pressed="${st.width === w}" title="Tebal ${w}px"><i style="height:${w}px"></i></button>`).join('')}</span>
       <span class="db-sep"></span>
       <span class="db-dash">${dash('solid', 'Garis penuh', '')}${dash('dash', 'Putus-putus', '5 3')}${dash('dot', 'Titik-titik', '1.5 2.5')}</span>
-      ${d.kind === 'text' ? `<span class="db-sep"></span><input class="db-text" type="text" maxlength="120" value="${(st.text ?? '').replace(/"/g, '&quot;')}" aria-label="Isi teks">` : ''}
+      ${d.kind === 'text' ? `<span class="db-sep"></span><input class="db-text" type="text" maxlength="120" value="${esc(st.text ?? '')}" aria-label="Isi teks">` : ''}
+      ${CAN.label(d.kind) ? `<span class="db-sep"></span><input class="db-text db-label" type="text" maxlength="80" placeholder="+ label" value="${esc(st.text ?? '')}" aria-label="Label">` : ''}
       <span class="db-sep"></span>
+      <button type="button" data-act="lock" title="${d.locked ? 'Buka kunci' : 'Kunci posisi'}" aria-label="Kunci" aria-pressed="${!!d.locked}">${svg(d.locked ? 'lock' : 'unlock')}</button>
+      <button type="button" data-act="settings" title="Pengaturan lengkap (klik dua kali gambar)" aria-label="Pengaturan">${svg('gear')}</button>
       <button type="button" data-act="copy" title="Duplikat (Ctrl+D)" aria-label="Duplikat">${svg('copy')}</button>
       <button type="button" data-act="delete" title="Hapus (Delete)" aria-label="Hapus">${svg('delete')}</button>`
     this.bar.hidden = false
@@ -254,6 +522,8 @@ export class DrawTools {
       else if (b.dataset.width) this.apply({ width: Number(b.dataset.width) })
       else if (b.dataset.dash) this.apply({ dash: b.dataset.dash as Dash })
       else if (b.dataset.act === 'copy') this.layer.duplicate()
+      else if (b.dataset.act === 'lock') this.layer.patch(d.id, (x) => (x.locked = !x.locked || undefined))
+      else if (b.dataset.act === 'settings') this.openSettings(d.id)
       else if (b.dataset.act === 'delete') this.layer.removeSelected()
     }
     this.bar.querySelector<HTMLInputElement>('input[type=color]')!.oninput = (e) => this.apply({ color: (e.target as HTMLInputElement).value }, false)
@@ -261,7 +531,7 @@ export class DrawTools {
     if (text) {
       text.oninput = () => this.layer.setStyle({ text: text.value })
       // a fresh text drawing: type straight away
-      if (st.text === DEFAULT_STYLE.text.text) queueMicrotask(() => text.select())
+      if (d.kind === 'text' && st.text === DEFAULT_STYLE.text.text) queueMicrotask(() => text.select())
     }
   }
 

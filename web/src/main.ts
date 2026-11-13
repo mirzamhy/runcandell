@@ -7,6 +7,7 @@ import {
   TickMarkType,
   createChart,
   createSeriesMarkers,
+  createTextWatermark,
   type CandlestickData,
   type HistogramData,
   type LogicalRange,
@@ -21,6 +22,7 @@ import { BacktestUI } from './backtest/ui'
 import { DuelUI, type DuelMarker } from './duel'
 import type { BtTrade } from './backtest/run'
 import { SeriesStore, TIMEFRAMES, dataSpan, loadManifest, type Bar, type Manifest, type TF } from './data'
+import { ChartSettingsDialog, alpha, applyLook, loadLook } from './chartsettings'
 import { openMenu, type MenuItem } from './ctxmenu'
 import { DrawingLayer, type Drawing } from './drawings'
 import { DrawTools, magnetLabel } from './drawtools'
@@ -203,6 +205,33 @@ const volume = chart.addSeries(
 chart.panes()[0].setStretchFactor(4)
 chart.panes()[1].setStretchFactor(1)
 
+// ---------- chart look (settings dialog) ----------
+let look = loadLook()
+const watermark = createTextWatermark(chart.panes()[0], { visible: false, horzAlign: 'center', vertAlign: 'center', lines: [] })
+function updateWatermark() {
+  const c = alpha(look.textColor, 0.14)
+  watermark.applyOptions({
+    visible: look.watermark,
+    lines: [
+      { text: duelBars ? 'DUEL' : 'XAUUSD', color: c, fontSize: 56, fontStyle: 'bold' },
+      { text: tf, color: c, fontSize: 28 },
+    ],
+  })
+}
+function setLook(l: typeof look) {
+  look = l
+  applyLook(chart, candles, volume, look)
+  // an empty volume pane would keep its height: shrink it instead
+  chart.panes()[1]?.setStretchFactor(look.volume ? 1 : 0.0001)
+  updateWatermark()
+  updateQuoteLines()
+  if (shown.length) render()
+}
+const lookDialog = new ChartSettingsDialog(look, setLook)
+const openChartSettings = () => lookDialog.open(look)
+applyLook(chart, candles, volume, look)
+if (!look.volume) chart.panes()[1]?.setStretchFactor(0.0001)
+
 const drawings = new DrawingLayer(
   {
     toLogical: (t) => (store ? store.indexOfTime(t) : 0),
@@ -215,7 +244,11 @@ const drawings = new DrawingLayer(
 candles.attachPrimitive(drawings)
 drawings.load(load<Drawing[]>(KEY.drawings, []))
 drawings.onChange = () => save(KEY.drawings, drawings.drawings)
-const drawTools = new DrawTools($('tools'), chartWrap, drawings)
+const drawTools = new DrawTools($('tools'), chartWrap, drawings, {
+  toInput: (t) => toInputValue(shift(t)),
+  fromInput: (v) => parseZoned(v, zone),
+  timeframes: TIMEFRAMES,
+})
 
 const indicators = new IndicatorManager({ chart, candles }, $('chips'), $('pane-chips'), $<HTMLDialogElement>('ind-dialog'))
 indicators.onSave = (list) => save(KEY.indicators, list)
@@ -522,8 +555,8 @@ function render(opts: { incremental?: boolean } = {}) {
   const bars = shown
   const c: CandlestickData<Time>[] = new Array(bars.length)
   const v: HistogramData<Time>[] = new Array(bars.length)
-  const upVol = 'rgba(38,166,154,0.45)'
-  const downVol = 'rgba(239,83,80,0.45)'
+  const upVol = alpha(look.up, 0.45)
+  const downVol = alpha(look.down, 0.45)
   let prev = -Infinity
   for (let i = 0; i < bars.length; i++) {
     const b = bars[i]
@@ -577,8 +610,8 @@ const fmt = (n: number) => n.toFixed(2)
 /** Bid/Ask lines at the newest visible bar (the replay cursor in replay mode). */
 function updateQuoteLines() {
   const last = shown[shown.length - 1]
-  const show = !!last && (replay || duelBars ? true : store.atLatest)
-  const bidColor = last && last.close >= last.open ? color('--up') : color('--down')
+  const show = look.bidAsk && !!last && (replay || duelBars ? true : store.atLatest)
+  const bidColor = last && last.close >= last.open ? look.up : look.down
   bidLine.applyOptions({ price: last?.close ?? 0, color: bidColor, lineVisible: show, axisLabelVisible: show })
   askLine.applyOptions({ price: last ? last.close + last.spread : 0, lineVisible: show, axisLabelVisible: show })
 }
@@ -1066,6 +1099,7 @@ function buildContextMenu() {
     items.push(
       'sep',
       { label: magnetLabel(drawings.magnet), hint: 'ganti', act: () => drawTools.cycleMagnet() },
+      { label: 'Pengaturan chart…', act: openChartSettings },
       {
         label: 'Reset skala chart',
         act: () => {
@@ -1082,6 +1116,8 @@ function buildContextMenu() {
 }
 
 function syncTFButtons() {
+  updateWatermark()
+  drawings.setTF(tf)
   for (const b of tfsEl.querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.tf === tf))
 }
 
@@ -1113,6 +1149,7 @@ function buildControls() {
   })
 
   $('latest').addEventListener('click', () => void goLatest())
+  $('cs-btn').addEventListener('click', openChartSettings)
 
   buildContextMenu()
 
