@@ -42,7 +42,7 @@ Sumber: XAUUSD M1 dari terminal MetaTrader 5 (Windows, terminal terpasang dan lo
 
 ```bash
 pip install -r tools/requirements.txt
-python tools/export_mt5.py            # 3 bulan terakhir -> data/raw/*.parquet
+python tools/export_mt5.py            # 12 bulan terakhir -> data/raw/*.parquet
 python tools/build_data.py --strict   # validasi + piramida timeframe -> data/build/
 ```
 
@@ -57,7 +57,7 @@ Format: Parquet, semua kolom integer.
 | `tick_volume` | uint32 | jumlah tick |
 | `spread` | uint16 | spread minimum dalam point |
 
-Delta encoding + zstd: ±8 byte per candle M1 (3 bulan ±0,7 MB, 10 tahun ±29 MB).
+Delta encoding + zstd: ±8 byte per candle M1 (1 tahun ±2,9 MB, 10 tahun ±29 MB).
 
 `data/build/`:
 - `M1/YYYY-MM.parquet` per bulan
@@ -67,4 +67,4 @@ Delta encoding + zstd: ±8 byte per candle M1 (3 bulan ±0,7 MB, 10 tahun ±29 M
 
 Browser membaca Parquet dengan [`hyparquet`](https://github.com/hyparam/hyparquet) + `hyparquet-compressors`.
 
-History M1 lebih dari ~3 bulan butuh `Max bars in chart` dinaikkan di MT5.
+Data sekarang: akun Exness standar, simbol `XAUUSD`, 1 tahun, spread mengambang (median ±$0,17). History M1 lebih dari ~3 bulan butuh `Max bars in chart` dinaikkan di MT5.

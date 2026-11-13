@@ -2,7 +2,7 @@
 
 Tempat belajar trading XAUUSD gratis: chart mirip TradingView, bar replay, backtest, dan duel antar user di chart yang sama.
 
-Data: XAUUSD M1 dari MetaTrader 5 (gratis), mulai 3 bulan. Field: `time` (UTC), `open`, `high`, `low`, `close`, `tick_volume`, `spread`.
+Data: XAUUSD M1 dari MetaTrader 5 (gratis), mulai 1 tahun (akun Exness standar, simbol `XAUUSD`, spread mengambang). Field: `time` (UTC), `open`, `high`, `low`, `close`, `tick_volume`, `spread`.
 
 ## Stack
 

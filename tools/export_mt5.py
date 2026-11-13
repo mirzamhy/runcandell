@@ -80,7 +80,7 @@ def fetch(sym, a, b, tz_offset_h):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--months", type=int, default=3)
+    ap.add_argument("--months", type=int, default=12)
     ap.add_argument("--start", help="YYYY-MM-DD (UTC)")
     ap.add_argument("--end", help="YYYY-MM-DD (UTC), default now")
     ap.add_argument("--symbol")
