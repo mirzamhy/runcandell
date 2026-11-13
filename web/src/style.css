@@ -870,75 +870,47 @@ input:disabled {
   cursor: not-allowed;
 }
 
-/* compact dock head: only on small screens, where the panel folds under the chart */
-.dock-head {
-  display: none;
-}
-
+/* small screens in replay / backtest: the workspace scrolls like a page.
+   The chart fills the view (with the panel's top peeking out), scroll down for
+   the ticket, positions, history, stats and the equity curve. */
 @media (max-width: 900px) {
-  body.replay .workspace {
+  body.replay main.workspace,
+  body.bt main.workspace {
+    container-type: size;
     grid-template-columns: 40px minmax(0, 1fr);
-    grid-template-rows: minmax(max(260px, 42vh), 1fr) auto;
+    /* max-content: the panel takes its full height, the workspace scrolls */
+    grid-template-rows: max-content max-content;
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
-  body.replay .trade {
+  body.replay .workspace > .chart-wrap,
+  body.bt .workspace > .chart-wrap,
+  body.replay .workspace > .tools,
+  body.bt .workspace > .tools {
+    height: max(300px, calc(100cqh - 52px));
+    grid-row: 1;
+  }
+  body.replay .workspace > .trade,
+  body.bt .workspace > .bt {
     grid-column: 1 / -1;
-    max-height: 45vh;
-    padding: 8px 10px;
+    grid-row: 2;
+    min-height: 0;
+    overflow: visible;
     border-left: 0;
     border-top: 1px solid var(--border);
   }
-  /* folded: the chart keeps the room, the head still trades at market */
-  body.replay .trade:not(.open) > :not(.dock-head) {
-    display: none;
+  body.replay .trade {
+    padding: 10px;
   }
-  .dock-head {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+  body.bt .workspace .bt-body {
+    overflow: visible;
+  }
+  /* tabs stay reachable while scrolling through the results */
+  body.bt .workspace .bt-head {
     position: sticky;
-    top: -8px;
-    z-index: 1;
-    margin: -8px -10px 0;
-    padding: 8px 10px;
+    top: 0;
+    z-index: 3;
     background: var(--panel);
-  }
-  .trade.open .dock-head {
-    border-bottom: 1px solid var(--border);
-  }
-  /* unfolded: the ticket has its own SELL/BUY */
-  .trade.open .dock-head .sell,
-  .trade.open .dock-head .buy {
-    display: none;
-  }
-  .dock-toggle {
-    flex: none;
-    font-weight: 600;
-  }
-  .trade.open .dock-toggle span {
-    display: inline-block;
-    transform: rotate(180deg);
-  }
-  .dock-pl {
-    display: grid;
-    min-width: 70px;
-  }
-  .dock-pl .k {
-    font-size: 10px;
-  }
-  .dock-head .sell,
-  .dock-head .buy {
-    flex: 1;
-    min-height: 34px;
-    border: 0;
-    color: #fff;
-    font-weight: 600;
-    font-size: 12px;
-  }
-  .dock-head .sell {
-    background: #c43d3a;
-  }
-  .dock-head .buy {
-    background: #2f6fe0;
   }
   .replay-bar .hide-date span {
     display: none;
@@ -953,7 +925,7 @@ body.bt .workspace {
 body.bt .tools {
   grid-row: 1 / -1;
 }
-.bt {
+section.bt {
   grid-column: 2 / -1;
   min-height: 0;
   display: flex;
@@ -962,7 +934,7 @@ body.bt .tools {
   background: var(--panel);
   min-width: 0;
 }
-.bt[hidden] {
+section.bt[hidden] {
   display: none;
 }
 .bt-head {
@@ -1180,14 +1152,14 @@ body.bt .tools {
   font-size: 16px;
   font-variant-numeric: tabular-nums;
 }
-.bt .pos,
-.bt td.buy {
+section.bt .pos,
+section.bt td.buy {
   color: var(--up);
 }
-.bt .neg {
+section.bt .neg {
   color: var(--down);
 }
-.bt td.sell {
+section.bt td.sell {
   color: var(--down);
 }
 .bt-canvas {

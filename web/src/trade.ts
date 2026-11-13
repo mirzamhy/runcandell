@@ -278,8 +278,6 @@ export interface TradeUIOptions {
   onChange: () => void
   /** trade journal (F5): button on finished trades */
   journal?: { has: (t: ClosedTrade) => boolean; open: (t: ClosedTrade) => void }
-  /** the panel changed size (folded / unfolded on small screens) */
-  onLayout?: () => void
 }
 
 export class TradeUI {
@@ -421,12 +419,6 @@ export class TradeUI {
   private build() {
     const r = this.o.root
     r.innerHTML = `
-      <div class="dock-head">
-        <button type="button" class="dock-toggle" data-f="dockToggle" aria-expanded="false">Order <span aria-hidden="true">▴</span></button>
-        <span class="dock-pl"><span class="k">P/L</span><b data-f="floating2"></b></span>
-        <button type="button" class="sell" data-side="sell">SELL <b data-f="bid2"></b></button>
-        <button type="button" class="buy" data-side="buy">BUY <b data-f="ask2"></b></button>
-      </div>
       <section class="acct">
         <div><span class="k">Saldo</span><b data-f="balance"></b></div>
         <div><span class="k">Equity</span><b data-f="equity"></b></div>
@@ -460,8 +452,6 @@ export class TradeUI {
         <canvas data-f="curve" height="64" aria-label="Kurva equity"></canvas>
       </section>`
     for (const el of r.querySelectorAll<HTMLElement>('[data-f]')) this.el[el.dataset.f!] = el
-    // small screens: the panel folds down to the dock head so the chart keeps the room
-    this.el.dockToggle.addEventListener('click', () => this.setDock(!r.classList.contains('open')))
 
     const form = this.el.ticket as HTMLFormElement
     const field = (n: string) => form.elements.namedItem(n) as HTMLInputElement
@@ -494,10 +484,9 @@ export class TradeUI {
     this.el.body.addEventListener('change', (e) => this.onBodyChange(e))
   }
 
-  setDock(open: boolean) {
-    this.o.root.classList.toggle('open', open)
-    this.el.dockToggle.setAttribute('aria-expanded', String(open))
-    this.o.onLayout?.()
+  /** Small screens: the panel sits under the chart in the page scroll, bring the ticket into view. */
+  private revealTicket() {
+    if (matchMedia('(max-width: 900px)').matches) this.el.ticket.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
 
   /** Fill the ticket with a pending order at `price` (from the chart's right-click menu). */
@@ -507,7 +496,7 @@ export class TradeUI {
     sel.value = type
     sel.dispatchEvent(new Event('change'))
     ;(form.elements.namedItem('price') as HTMLInputElement).value = price.toFixed(2)
-    this.setDock(true)
+    this.revealTicket()
     this.updateRisk()
     ;(form.elements.namedItem('sl') as HTMLInputElement).focus()
   }
@@ -656,10 +645,6 @@ export class TradeUI {
     const fl = acc.floating()
     this.el.floating.textContent = fmtMoney(fl, true)
     this.el.floating.className = fl > 0 ? 'up' : fl < 0 ? 'down' : ''
-    this.el.floating2.textContent = fmtMoney(fl, true)
-    this.el.floating2.className = this.el.floating.className
-    this.el.bid2.textContent = q ? fmtPx(q.bid) : '–'
-    this.el.ask2.textContent = q ? fmtPx(q.ask) : '–'
     this.el.free.textContent = fmtMoney(acc.freeMargin())
     this.el.bid.textContent = q ? fmtPx(q.bid) : '–'
     this.el.ask.textContent = q ? fmtPx(q.ask) : '–'
