@@ -1275,3 +1275,251 @@ body.bt .tools {
     text-align: left;
   }
 }
+
+/* ---------- account + journal (F5) ---------- */
+
+.acct-btn {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.acct-dialog,
+.jr-dialog {
+  padding: 0;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.acct-dialog {
+  width: min(960px, calc(100vw - 24px));
+  height: min(720px, calc(100vh - 48px));
+}
+.acct-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.jr-dialog {
+  width: min(520px, calc(100vw - 24px));
+}
+.acct-dialog::backdrop,
+.jr-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+}
+.acct-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.acct-body {
+  flex: 1;
+  overflow: auto;
+  padding: 12px;
+  min-height: 0;
+}
+.acct-cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.acct-cols form.bt-card,
+.acct-cols section.bt-card {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+.acct-code code {
+  display: block;
+  margin: 8px 0;
+  padding: 8px;
+  border: 1px dashed var(--accent);
+  border-radius: 6px;
+  color: var(--accent);
+  font-size: 14px;
+  word-break: break-all;
+  user-select: all;
+}
+.acct-code p {
+  margin: 0;
+  font-size: 12px;
+}
+.acct-body .bt-table td button + button {
+  margin-left: 6px;
+}
+.acct-body .pos,
+.jr-form .pos {
+  color: var(--up);
+}
+.acct-body .neg,
+.jr-form .neg {
+  color: var(--down);
+}
+.jr-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.jr-bar label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.jr-list {
+  display: grid;
+  gap: 8px;
+}
+.jr-card {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  min-width: 0;
+}
+.jr-shot {
+  flex: 0 0 180px;
+}
+.jr-shot img {
+  width: 180px;
+  height: 120px;
+  object-fit: contain;
+  background: var(--bg);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  display: block;
+}
+.jr-main {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+.jr-top {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px;
+}
+.jr-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.chip {
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text);
+}
+.chip.emo {
+  border-color: #4c8dff;
+  color: #8fb5ff;
+}
+.chip.tag {
+  color: var(--muted);
+}
+.jr-note {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text);
+}
+.jr-act {
+  display: flex;
+  gap: 4px;
+}
+.jr-form {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+}
+.jr-form h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.jr-trade {
+  margin: 0;
+  font-size: 13px;
+}
+.jr-emo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+}
+.jr-emo legend {
+  color: var(--muted);
+  padding: 0 4px;
+}
+.jr-emo label {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.jr-emo label:has(input:checked) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.jr-text {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.jr-text textarea {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+}
+.jr-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.trade .jr-btn {
+  white-space: nowrap;
+}
+.bt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+@media (max-width: 640px) {
+  .jr-card {
+    flex-direction: column;
+  }
+  .jr-shot,
+  .jr-shot img {
+    flex-basis: auto;
+    width: 100%;
+    height: 140px;
+  }
+}

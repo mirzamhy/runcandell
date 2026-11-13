@@ -58,8 +58,8 @@ Data: XAUUSD M1 dari MetaTrader 5 (gratis), mulai 1 tahun (akun Exness standar, 
 - Optimasi parameter sederhana (grid kecil) + peringatan overfitting.
 - Bandingkan 2 hasil backtest berdampingan.
 
-### F5 — Akun & jurnal
-- Login nickname/magic link.
+### F5 — Akun & jurnal (selesai, kecuali magic link)
+- Login nickname + kode pemulihan. Magic link email belum (butuh layanan kirim email).
 - Simpan sesi replay, hasil backtest, strategi.
 - Jurnal trade: alasan entry, screenshot chart otomatis, tag setup, emosi.
 - Statistik pribadi lintas sesi.

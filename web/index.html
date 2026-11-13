@@ -33,6 +33,7 @@
       </form>
       <button type="button" id="latest" title="Ke candle terbaru">Terbaru</button>
       <select id="zone" aria-label="Zona waktu"></select>
+      <button type="button" id="acct-btn" class="acct-btn">Masuk</button>
     </header>
 
     <main class="workspace">
@@ -82,6 +83,7 @@
           <span class="clock" data-r="clock"></span>
           <label class="hide-date" title="Sembunyikan tanggal"><input type="checkbox" data-r="hide" /> <span>Sembunyikan </span>tanggal</label>
           <span class="spacer"></span>
+          <button type="button" data-r="save" title="Simpan sesi ke akun">Simpan</button>
           <button type="button" data-r="exit">Keluar replay</button>
         </div>
         <div class="overlay" id="overlay" hidden></div>
@@ -92,6 +94,8 @@
 
     <footer class="statusbar" id="status"></footer>
     <dialog id="ind-dialog" class="ind-dialog"></dialog>
+    <dialog id="acct-dialog" class="acct-dialog" aria-label="Akun"></dialog>
+    <dialog id="jr-dialog" class="jr-dialog" aria-label="Jurnal trade"></dialog>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

@@ -16,6 +16,7 @@ import {
   type UTCTimestamp,
 } from 'lightweight-charts'
 import './style.css'
+import { AccountUI } from './account'
 import { BacktestUI } from './backtest/ui'
 import type { BtTrade } from './backtest/run'
 import { SeriesStore, TIMEFRAMES, dataSpan, loadManifest, type Bar, type Manifest, type TF } from './data'
@@ -223,7 +224,65 @@ const trade = new TradeUI({
     updateQuoteLines()
     saveSession()
   },
+  journal: {
+    has: (t) => account.isJournaled(t),
+    open: (t) => {
+      const risk = t.sl === null ? null : Math.abs(t.entry - t.sl) * 100 * t.lots
+      void account.openEntry({
+        source: 'replay',
+        replayId: replay?.serverId ?? null,
+        trade: { ...t, r: risk ? t.pnl / risk : null },
+        shot: chartShot,
+      })
+    },
+  },
 })
+
+// ---------- account + journal (F5) ----------
+
+/** Chart picture for the journal: WebP, scaled down if large. */
+function chartShot(): Promise<Blob | null> {
+  const src = chart.takeScreenshot()
+  const scale = Math.min(1, 1400 / src.width)
+  const c = document.createElement('canvas')
+  c.width = Math.round(src.width * scale)
+  c.height = Math.round(src.height * scale)
+  c.getContext('2d')!.drawImage(src, 0, 0, c.width, c.height)
+  return new Promise((res) => c.toBlob((b) => res(b), 'image/webp', 0.82))
+}
+
+const account = new AccountUI({
+  button: $<HTMLButtonElement>('acct-btn'),
+  dialog: $<HTMLDialogElement>('acct-dialog'),
+  entryDialog: $<HTMLDialogElement>('jr-dialog'),
+  zone: () => zone,
+  onLoadReplay: (session) => {
+    if (btOpen()) setBacktest(false)
+    const s = session as ReplaySession
+    void startReplay(s.cursorTime, s)
+  },
+  onUseBacktest: (b, asCompare) => {
+    setBacktest(true)
+    bt?.loadSaved(b as never, asCompare)
+  },
+  onJournalChange: () => trade.invalidate(),
+})
+
+async function saveReplayToAccount() {
+  if (!replay) return
+  stopPlay()
+  const label = formatWall(shift(replay.startTime))
+  try {
+    const r = await account.saveReplay(replay.session(), `Replay ${label}`)
+    if (r && replay) {
+      replay.serverId = r.id
+      replay.name = r.name
+      saveSession(true)
+    }
+  } catch (err) {
+    toast((err as Error).message, 'bad')
+  }
+}
 
 // ---------- backtest ----------
 
@@ -269,6 +328,11 @@ function setBacktest(open: boolean) {
         await goTo(t)
       },
       onClose: () => setBacktest(false),
+      onSave: (r) => {
+        void account
+          .saveBacktest({ spec: r.spec, metrics: r.metrics, curve: r.curve, from: r.from, to: r.to }, r.spec.name || `Backtest ${r.spec.tf}`)
+          .catch((err) => toast((err as Error).message, 'bad'))
+      },
     })
   }
   document.body.classList.toggle('bt', open)
@@ -714,6 +778,7 @@ function buildReplayControls() {
     }
     if (act === 'restart' && confirm('Ulang dari titik awal? Posisi dan riwayat sesi ini dihapus.')) void startReplay(replay.startTime)
     if (act === 'exit') void exitReplay()
+    if (act === 'save') void saveReplayToAccount()
   })
   const speedSel = replayBar.querySelector<HTMLSelectElement>('[data-r="speed"]')!
   for (const s of [1, 2, 5, 10, 20]) speedSel.add(new Option(`${s}×/detik`, String(s), false, s === speed))
@@ -866,6 +931,7 @@ async function boot() {
   }
   render()
   showLatest(160)
+  void account.init()
   gotoInput.value = toInputValue(displayTime(store.bars[store.bars.length - 1].time))
   showOverlay(null)
 }

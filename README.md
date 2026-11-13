@@ -34,6 +34,21 @@ Backtest (F4), lewat tombol **Backtest**:
 - Laporan: net profit, win rate, profit factor, max drawdown, rata-rata R, expectancy, Sharpe, kurva equity + drawdown, per jam/hari/sesi. Marker trade di chart, klik trade untuk lompat.
 - Optimasi grid 1–2 parameter (maks 200 kombinasi) dengan data latih 70% / uji 30% dan peringatan overfitting. Bandingkan dua hasil (A/B).
 
+Akun & jurnal (F5), lewat tombol **Masuk** di kanan atas (butuh server API):
+- Akun cukup nickname. Setelah dibuat muncul kode pemulihan untuk masuk dari perangkat lain (tidak ada email/password).
+- Jurnal trade: di replay, tab **Riwayat** → **Jurnal** di trade yang selesai. Isi setup, emosi, alasan entry, tag; screenshot chart dilampirkan otomatis.
+- Statistik pribadi lintas sesi: win rate, net, rata-rata R, per setup dan per emosi.
+- Simpan sesi replay ke akun (tombol **Simpan** di bar replay) dan lanjutkan dari perangkat mana pun. Simpan hasil backtest, pakai lagi strateginya, atau jadikan pembanding A.
+
+```bash
+cd server
+npm install
+npm run dev        # API di http://localhost:5201, database SQLite di data/server/runcandell.db
+npm test
+```
+
+Web dev mem-proxy `/api` ke port 5201. Server pakai `node:sqlite` bawaan Node 24 (tanpa modul native).
+
 Produksi: set `VITE_DATA_URL` ke URL folder data di CDN (default `/data`).
 
 ## Data (F0)

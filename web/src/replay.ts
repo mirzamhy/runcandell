@@ -21,6 +21,9 @@ export interface ReplaySession {
   cursorTime: number
   account: AccountState
   hideDate: boolean
+  /** id of the copy saved on the server (F5), so later saves update it */
+  serverId?: number | null
+  name?: string
 }
 
 /**
@@ -35,6 +38,8 @@ export class Replay {
   startTime = 0
   account: Account
   hideDate = false
+  serverId: number | null = null
+  name = ''
 
   constructor(manifest: Manifest, cfg: AccountConfig = DEFAULT_CONFIG) {
     this.m1 = new SeriesStore(manifest, 'M1')
@@ -64,13 +69,22 @@ export class Replay {
   async resume(s: ReplaySession) {
     this.account = Account.fromJSON(s.account)
     this.hideDate = s.hideDate
+    this.serverId = s.serverId ?? null
+    this.name = s.name ?? ''
     await this.m1.loadAround(s.cursorTime)
     this.cursor = Math.max(0, floorIndex(this.m1.bars, s.cursorTime))
     this.startTime = s.startTime
   }
 
   session(): ReplaySession {
-    return { startTime: this.startTime, cursorTime: this.cursorTime, account: this.account.toJSON(), hideDate: this.hideDate }
+    return {
+      startTime: this.startTime,
+      cursorTime: this.cursorTime,
+      account: this.account.toJSON(),
+      hideDate: this.hideDate,
+      serverId: this.serverId,
+      name: this.name,
+    }
   }
 
   private candle(i: number) {

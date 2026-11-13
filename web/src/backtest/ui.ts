@@ -108,6 +108,8 @@ export interface BacktestUIOptions {
   onTrades: (trades: BtTrade[] | null) => void
   onJump: (t: number, tf: TF) => void
   onClose: () => void
+  /** save the current result to the user's account (F5) */
+  onSave?: (r: RunReport) => void
 }
 
 export class BacktestUI {
@@ -218,6 +220,7 @@ export class BacktestUI {
       toast('Hasil disimpan sebagai A. Ubah strategi, jalankan lagi, lalu buka tab Banding.', 'good')
       return
     }
+    if (act === 'save-acct' && this.report) return this.o.onSave?.(this.report)
     if (act === 'clearA') {
       this.saved = null
       save(KEY.saved, null)
@@ -385,6 +388,19 @@ export class BacktestUI {
       <p class="bt-hint">Kode jalan di Web Worker, terpisah dari halaman. Jangan tempel kode dari orang yang tidak kamu percaya.</p></section>`
   }
 
+  /** Load a backtest saved on the account: as the strategy to edit, or as comparison A. */
+  loadSaved(b: { spec: unknown; metrics: Metrics; curve: { t: number[]; v: number[] }; from: number; to: number }, asCompare: boolean) {
+    const spec = normalize(b.spec as Partial<StrategySpec>)
+    if (asCompare) {
+      this.saved = { spec, metrics: b.metrics, curve: b.curve, from: b.from, to: b.to }
+      save(KEY.saved, this.saved)
+      return this.show('compare')
+    }
+    this.spec = spec
+    this.changed(false)
+    this.show('strategy')
+  }
+
   // ---------- run ----------
 
   private getWorker(): Worker {
@@ -508,7 +524,7 @@ export class BacktestUI {
         ${this.breakdownHtml('Hari', byDay)}
         ${this.breakdownHtml('Sesi (jam UTC)', bySess)}
       </div>
-      <button type="button" data-act="saveA">Simpan sebagai A untuk dibandingkan</button>`
+      <div class="bt-actions"><button type="button" data-act="saveA">Simpan sebagai A untuk dibandingkan</button>${this.o.onSave ? '<button type="button" data-act="save-acct">Simpan ke akun</button>' : ''}</div>`
   }
 
   private breakdownHtml(title: string, rows: { key: string; trades: number; winRate: number; net: number }[], label = (k: string) => k): string {

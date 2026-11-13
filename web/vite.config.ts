@@ -27,6 +27,7 @@ function serveData(): Plugin {
 
 export default defineConfig({
   plugins: [serveData()],
-  server: { port: 5200, strictPort: true },
+  // API server (runcandell/server) on 5201; same origin through the proxy so the session cookie just works
+  server: { port: 5200, strictPort: true, proxy: { '/api': 'http://127.0.0.1:5201' } },
   worker: { format: 'es' },
 })

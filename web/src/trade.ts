@@ -8,7 +8,7 @@ import {
   type SeriesMarker,
   type Time,
 } from 'lightweight-charts'
-import { TradeError, stats, type Account, type AccountEvent, type PendingType, type Side } from './engine/account'
+import { TradeError, stats, type Account, type AccountEvent, type PendingType, type Side, type ClosedTrade } from './engine/account'
 
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 })
 const fmtMoney = (n: number, sign = false) => (sign && n > 0 ? '+' : '') + money.format(n)
@@ -200,6 +200,8 @@ export interface TradeUIOptions {
   /** chart time of the visible candle that contains UTC time t, or null if not on screen */
   chartTimeOf: (t: number) => Time | null
   onChange: () => void
+  /** trade journal (F5): button on finished trades */
+  journal?: { has: (t: ClosedTrade) => boolean; open: (t: ClosedTrade) => void }
 }
 
 export class TradeUI {
@@ -217,6 +219,12 @@ export class TradeUI {
     })
     this.markers = createSeriesMarkers(o.candles, [])
     this.build()
+  }
+
+  /** Rebuild the lists on the next refresh (e.g. journal state changed). */
+  invalidate() {
+    this.structureSig = ''
+    if (this.account) this.refresh()
   }
 
   attach(acc: Account) {
@@ -381,6 +389,11 @@ export class TradeUI {
     const acc = this.account
     if (!t || !acc) return
     const id = Number(t.dataset.id)
+    if (t.dataset.act === 'journal') {
+      const tr = acc.history.find((x) => x.id === id)
+      if (tr) this.o.journal?.open(tr)
+      return
+    }
     try {
       if (t.dataset.act === 'close') acc.closePosition(id)
       if (t.dataset.act === 'cancel') acc.cancelOrder(id)
@@ -493,13 +506,14 @@ export class TradeUI {
     } else {
       const rows = acc.history.slice(-100).reverse()
       html = rows.length
-        ? `<table><thead><tr><th>Trade</th><th>Entry → Exit</th><th>Tutup</th><th>P/L</th></tr></thead><tbody>${rows
+        ? `<table><thead><tr><th>Trade</th><th>Entry → Exit</th><th>Tutup</th><th>P/L</th>${this.o.journal ? '<th></th>' : ''}</tr></thead><tbody>${rows
             .map(
               (t) => `<tr>
                 <td class="${t.side}">${t.side.toUpperCase()} ${t.lots.toFixed(2)}</td>
                 <td>${fmtPx(t.entry)} → ${fmtPx(t.exit)}</td>
                 <td>${esc(REASON[t.reason])}</td>
                 <td class="${t.pnl > 0 ? 'up' : t.pnl < 0 ? 'down' : ''}">${fmtMoney(t.pnl, true)}</td>
+                ${this.o.journal ? `<td><button type="button" class="link jr-btn" data-act="journal" data-id="${t.id}" title="Tulis jurnal untuk trade ini">${this.o.journal.has(t) ? '✓ Jurnal' : 'Jurnal'}</button></td>` : ''}
               </tr>`,
             )
             .join('')}</tbody></table>`
