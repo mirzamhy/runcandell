@@ -13,6 +13,12 @@ npm run build      # hasil di web/dist
 
 Fitur: candlestick + panel volume, timeframe M1–D1, zona waktu (UTC/WIB/London/New York), lompat ke tanggal, tombol ke candle terbaru, legend OHLC/volume/spread, data dimuat per file saat chart digeser. Alat gambar: garis horizontal, trendline, zona, Fibonacci; bisa dipilih, digeser, dihapus (Delete), tersimpan di browser.
 
+Indikator (F2), lewat tombol **Indikator**:
+- Di chart: EMA, SMA, Bollinger Bands, VWAP harian, Supertrend, Ichimoku, Donchian, Pivot harian (classic), sesi pasar Asia/London/New York.
+- Panel bawah: RSI, MACD, Stochastic, ATR, OBV, MFI. VWAP, OBV, MFI pakai tick volume.
+- Nilai tampil di chip kiri atas (ikut crosshair); ikon gerigi untuk ubah periode dan warna; tersimpan di browser.
+- Rumus mengikuti default TradingView (RSI/ATR pakai Wilder, EMA diawali SMA); sudah dicocokkan dengan hitungan pandas.
+
 Produksi: set `VITE_DATA_URL` ke URL folder data di CDN (default `/data`).
 
 ## Data (F0)

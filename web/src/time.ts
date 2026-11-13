@@ -63,6 +63,13 @@ export function makeShifter(zone: string): (t: number) => number {
   }
 }
 
+const nyShift = makeShifter('America/New_York')
+
+/** Gold trading-day id (days since epoch): the day starts 17:00 New York, DST aware. */
+export function tradingDay(t: number): number {
+  return Math.floor((nyShift(t) + 7 * 3600) / 86400)
+}
+
 /** D1 bars start 17:00 New York; show them on their trading date (00:00 of the next calendar day). */
 export function d1DisplayTime(t: number): number {
   return Math.floor((t + 12 * 3600) / 86400) * 86400

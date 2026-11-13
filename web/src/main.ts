@@ -15,11 +15,13 @@ import {
 import './style.css'
 import { SeriesStore, TIMEFRAMES, loadManifest, type Bar, type Manifest, type TF } from './data'
 import { DrawingLayer, type Drawing, type Tool } from './drawings'
+import { IndicatorManager } from './indicators/manager'
+import type { IndicatorConfig } from './indicators/registry'
 import { ZONES, d1DisplayTime, formatWall, makeShifter, parseZoned, toInputValue } from './time'
 
 // ---------- persisted settings ----------
 
-const KEY = { tf: 'rc.v1.tf', zone: 'rc.v1.zone', drawings: 'rc.v1.drawings' }
+const KEY = { tf: 'rc.v1.tf', zone: 'rc.v1.zone', drawings: 'rc.v1.drawings', indicators: 'rc.v1.indicators', chipsCollapsed: 'rc.v1.chipsCollapsed' }
 
 function load<T>(key: string, fallback: T): T {
   try {
@@ -145,6 +147,11 @@ candles.attachPrimitive(drawings)
 drawings.load(load<Drawing[]>(KEY.drawings, []))
 drawings.onChange = () => save(KEY.drawings, drawings.drawings)
 
+const indicators = new IndicatorManager({ chart, candles }, $('chips'), $('pane-chips'), $<HTMLDialogElement>('ind-dialog'))
+indicators.onSave = (list) => save(KEY.indicators, list)
+indicators.collapsed = load<boolean>(KEY.chipsCollapsed, false)
+indicators.onCollapse = (c) => save(KEY.chipsCollapsed, c)
+
 // ---------- rendering ----------
 
 function render() {
@@ -165,6 +172,7 @@ function render() {
   }
   candles.setData(c)
   volume.setData(v)
+  indicators.update(bars, c.map((x) => x.time), store.tfSec)
   updateQuoteLines()
   drawings.refresh()
   updateLegend()
@@ -382,12 +390,39 @@ function buildControls() {
     if (drawings.drawings.length && confirm('Hapus semua gambar di chart?')) drawings.clear()
   })
 
-  chart.subscribeCrosshairMove((p) => updateLegend(p))
+  chart.subscribeCrosshairMove((p) => {
+    updateLegend(p)
+    const i = p.logical !== undefined && p.point ? Math.round(p.logical) : store.bars.length - 1
+    indicators.legend(Math.min(Math.max(i, 0), store.bars.length - 1))
+  })
+
+  const indBtn = $('ind-btn')
+  const indMenu = $('ind-menu')
+  const renderMenu = indicators.buildMenu(indMenu)
+  const setMenu = (open: boolean) => {
+    if (open) renderMenu()
+    indMenu.hidden = !open
+    indBtn.setAttribute('aria-expanded', String(open))
+    if (open) {
+      // keep the menu inside the viewport on narrow screens
+      indMenu.style.left = '0px'
+      const r = indMenu.getBoundingClientRect()
+      const overflow = r.right - (document.documentElement.clientWidth - 8)
+      if (overflow > 0) indMenu.style.left = `${-Math.min(overflow, r.left - 8)}px`
+    }
+  }
+  indBtn.addEventListener('click', () => setMenu(indMenu.hasAttribute('hidden')))
+  document.addEventListener('pointerdown', (e) => {
+    if (!indMenu.hasAttribute('hidden') && !(e.target as HTMLElement).closest('.ind-wrap')) setMenu(false)
+  })
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !indMenu.hasAttribute('hidden')) setMenu(false)
+  })
   chart.timeScale().subscribeVisibleLogicalRangeChange(onRangeChange)
 }
 
 if (import.meta.env.DEV) {
-  ;(window as unknown as Record<string, unknown>).__rc = { chart, getStore: () => store, drawings }
+  ;(window as unknown as Record<string, unknown>).__rc = { chart, getStore: () => store, drawings, indicators }
 }
 
 // ---------- boot ----------
@@ -404,6 +439,7 @@ async function boot() {
     return
   }
   drawings.setDigits(2)
+  indicators.load(load<IndicatorConfig[]>(KEY.indicators, []))
   buildControls()
   store = new SeriesStore(manifest, tf)
   try {
