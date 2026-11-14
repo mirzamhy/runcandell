@@ -49,6 +49,18 @@ o = runDecision(c, [bar(60, 2000, 2000.1, 1999.9, 2000)], { side: 'sell', sl: 20
 eq('sell timeout pays spread: (2000-2000.2)/4', o.r, -0.05)
 eq('skip = 0R', runDecision(c, [], { side: 'skip' }).r, 0)
 
+// 4b. limit / stop orders: fill when the run reaches the price, 1R = order price to SL
+o = runDecision(c, [bar(60, 2000, 2000.5, 1997, 1999), bar(120, 1999, 2002.5, 1999, 2002)], { side: 'buy', type: 'limit', price: 1998, sl: 1996, tp: 2002 })
+eq('buy limit fills at 1998, TP 2002 = 2R', [o.reason, o.r, o.entry, o.type, o.price], ['tp', 2, 1998, 'limit', 1998])
+o = runDecision(c, [bar(60, 2000, 2001, 1999.5, 2000)], { side: 'buy', type: 'limit', price: 1998, sl: 1996 })
+eq('limit never reached = unfilled 0R', [o.reason, o.r, o.entry], ['unfilled', 0, null])
+o = runDecision(c, [bar(60, 1996, 1996, 1994, 1994)], { side: 'sell', type: 'stop', price: 1995, sl: 1999 })
+eq('sell stop fills at 1995, closes at Ask 1994.2', [o.reason, o.r], ['time', 0.2])
+eq('buy limit above Ask rejected', checkDecision({ side: 'buy', type: 'limit', price: 2001, sl: 1995 }, c, 1), 'Buy limit harus di bawah harga Ask.')
+eq('sell stop above Bid rejected', checkDecision({ side: 'sell', type: 'stop', price: 2001, sl: 2005 }, c, 1), 'Sell stop harus di bawah harga Bid.')
+eq('pending SL measured from the order price', checkDecision({ side: 'buy', type: 'stop', price: 2003, sl: 2002.5 }, c, 1), 'SL terlalu dekat. Jarak minimal 1.00.')
+eq('valid buy stop', checkDecision({ side: 'buy', type: 'stop', price: 2003, sl: 2001 }, c, 1), null)
+
 // 5. cut search skips windows crossing a gap
 const gap = [...Array.from({ length: 10 }, (_, i) => bar(i * 60, 1)), ...Array.from({ length: 10 }, (_, i) => bar(100000 + i * 60, 1))]
 eq('first window without a gap', findCut(gap, 5, 5), 10)

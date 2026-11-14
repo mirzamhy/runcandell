@@ -116,16 +116,25 @@ export function minStop(m1UpToCut: Bar[]): number {
 
 export type DuelSide = 'buy' | 'sell' | 'skip'
 
+export type DuelOrderType = 'market' | 'limit' | 'stop'
+
 export interface Decision {
   side: DuelSide
+  /** market fills at the cut; limit/stop wait at `price` until the run reaches it */
+  type?: DuelOrderType
+  price?: number | null
   sl?: number | null
   tp?: number | null
 }
 
 export interface Outcome {
   side: DuelSide
+  type?: DuelOrderType
+  /** order price for limit/stop */
+  price?: number | null
   r: number
-  reason: CloseReason | 'skip' | 'timeout'
+  /** unfilled: the limit/stop price was never reached, 0R */
+  reason: CloseReason | 'skip' | 'timeout' | 'unfilled'
   entry: number | null
   exit: number | null
   exitTime: number | null
@@ -136,16 +145,33 @@ export interface Outcome {
 /** Entry prices at the cut: buy at Ask, sell at Bid. */
 export const entryOf = (cut: Bar, side: 'buy' | 'sell') => (side === 'buy' ? cut.close + cut.spread : cut.close)
 
+/** The pending type that fits a price: below the market a buy is a limit, above it a stop (sells mirrored). */
+export function pendingTypeFor(cut: Bar, side: 'buy' | 'sell', price: number): 'limit' | 'stop' {
+  return (price < entryOf(cut, side)) === (side === 'buy') ? 'limit' : 'stop'
+}
+
 /** Validation message (Indonesian) or null. Prices are real (not normalised). */
 export function checkDecision(d: Decision, cut: Bar, stopMin: number, fmt: (dist: number) => string = (x) => x.toFixed(2)): string | null {
   if (d.side === 'skip') return null
   if (d.side !== 'buy' && d.side !== 'sell') return 'Pilih buy, sell, atau skip.'
+  const type = d.type ?? 'market'
+  if (type !== 'market' && type !== 'limit' && type !== 'stop') return 'Jenis order tidak dikenal.'
   if (typeof d.sl !== 'number' || !Number.isFinite(d.sl)) return 'SL wajib diisi.'
-  const entry = entryOf(cut, d.side)
   const dir = d.side === 'buy' ? 1 : -1
-  // the SL must be on the far side of the price the position closes at (Bid for buys, Ask for sells)
-  const closeAt = d.side === 'buy' ? cut.close : cut.close + cut.spread
-  if ((closeAt - d.sl) * dir <= 0) return d.side === 'buy' ? 'SL buy harus di bawah harga.' : 'SL sell harus di atas harga.'
+  let entry = entryOf(cut, d.side)
+  if (type === 'market') {
+    // the SL must be on the far side of the price the position closes at (Bid for buys, Ask for sells)
+    const closeAt = d.side === 'buy' ? cut.close : cut.close + cut.spread
+    if ((closeAt - d.sl) * dir <= 0) return d.side === 'buy' ? 'SL buy harus di bawah harga.' : 'SL sell harus di atas harga.'
+  } else {
+    if (typeof d.price !== 'number' || !Number.isFinite(d.price) || d.price <= 0) return 'Harga order wajib diisi.'
+    if (Math.abs(d.price - entry) < 1e-9 || pendingTypeFor(cut, d.side, d.price) !== type) {
+      const where = (type === 'limit') === (d.side === 'buy') ? 'di bawah' : 'di atas'
+      return `${d.side === 'buy' ? 'Buy' : 'Sell'} ${type} harus ${where} harga ${d.side === 'buy' ? 'Ask' : 'Bid'}.`
+    }
+    entry = d.price
+    if ((entry - d.sl) * dir <= 0) return d.side === 'buy' ? 'SL buy harus di bawah harga order.' : 'SL sell harus di atas harga order.'
+  }
   if (Math.abs(entry - d.sl) < stopMin - 1e-9) return `SL terlalu dekat. Jarak minimal ${fmt(stopMin)}.`
   if (d.tp !== null && d.tp !== undefined) {
     if (!Number.isFinite(d.tp)) return 'TP tidak valid.'
@@ -157,18 +183,27 @@ export function checkDecision(d: Decision, cut: Bar, stopMin: number, fmt: (dist
 /** Play a decision through the candles after the cut. Exits at SL, TP, or the last close. */
 export function runDecision(cut: Bar, future: Bar[], d: Decision): Outcome {
   if (d.side === 'skip') return { side: 'skip', r: 0, reason: 'skip', entry: null, exit: null, exitTime: null, sl: null, tp: null }
+  const type = d.type ?? 'market'
   const acc = new Account({ balance: 1e12, leverage: 1000, contractSize: 100, commissionPerLot: 0, stopOutLevel: 0 })
   acc.recordEquity = false
   acc.onBar({ time: cut.time, open: cut.close, high: cut.close, low: cut.close, close: cut.close, spread: cut.spread })
-  const pos = acc.market(d.side, 1, d.sl ?? null, d.tp ?? null)
+  // 1R = planned distance: entry at the cut (market) or the order price (limit/stop); slippage shows in R
+  let planned: number
+  if (type === 'market') planned = acc.market(d.side, 1, d.sl ?? null, d.tp ?? null).entry
+  else {
+    acc.pending(d.side, type, 1, d.price as number, d.sl ?? null, d.tp ?? null)
+    planned = d.price as number
+  }
+  const base = { side: d.side, type, price: type === 'market' ? null : (d.price as number) }
   for (const b of future) {
     acc.onBar(b)
-    if (!acc.positions.length) break
+    if (!acc.positions.length && !acc.orders.length) break
   }
+  if (!acc.history.length && !acc.positions.length) return { ...base, r: 0, reason: 'unfilled', entry: null, exit: null, exitTime: null, sl: d.sl ?? null, tp: d.tp ?? null }
   if (acc.positions.length) acc.closeAll('time')
   const t = acc.history[0]
-  const risk = Math.abs(pos.entry - (d.sl as number)) * 100
-  return { side: d.side, r: Math.round((t.pnl / risk) * 1000) / 1000, reason: t.reason === 'manual' ? 'time' : t.reason, entry: t.entry, exit: t.exit, exitTime: t.closeTime, sl: t.sl, tp: t.tp }
+  const risk = Math.abs(planned - (d.sl as number)) * 100
+  return { ...base, r: Math.round((t.pnl / risk) * 1000) / 1000, reason: t.reason === 'manual' ? 'time' : t.reason, entry: t.entry, exit: t.exit, exitTime: t.closeTime, sl: t.sl, tp: t.tp }
 }
 
 /**

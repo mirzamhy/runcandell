@@ -174,6 +174,9 @@ export interface Snapshot {
 
 export interface DuelOutcome {
   side: 'buy' | 'sell' | 'skip'
+  type?: 'market' | 'limit' | 'stop'
+  /** order price for limit/stop */
+  price?: number | null
   r: number
   reason: string
   entry: number | null
@@ -197,7 +200,7 @@ export const duelApi = {
   get: (code: string) => call<DuelDetail>('GET', `/duels/${encodeURIComponent(code)}`),
   join: (code: string) => call<{ ok: true }>('POST', `/duels/${encodeURIComponent(code)}/join`),
   start: (code: string, n: number) => call<Snapshot>('POST', `/duels/${encodeURIComponent(code)}/rounds/${n}/start`),
-  decide: (code: string, n: number, d: { side: 'buy' | 'sell' | 'skip'; sl?: number | null; tp?: number | null }) =>
+  decide: (code: string, n: number, d: { side: 'buy' | 'sell' | 'skip'; type?: 'market' | 'limit' | 'stop'; price?: number | null; sl?: number | null; tp?: number | null }) =>
     call<DecideResult>('POST', `/duels/${encodeURIComponent(code)}/rounds/${n}/decide`, d),
 }
 

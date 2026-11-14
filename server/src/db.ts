@@ -111,6 +111,11 @@ const MIGRATIONS = [
     PRIMARY KEY (duel_id, round_no, user_id)
   );
   `,
+  // duel limit/stop orders
+  `
+  ALTER TABLE duel_decisions ADD COLUMN order_type TEXT;
+  ALTER TABLE duel_decisions ADD COLUMN order_price REAL;
+  `,
 ]
 
 export function openDb(path: string): DatabaseSync {

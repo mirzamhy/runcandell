@@ -65,6 +65,8 @@ interface DecisionRow {
   exit_time: number | null
   reason: string | null
   r: number | null
+  order_type: string | null
+  order_price: number | null
 }
 
 const pick = <T extends readonly unknown[]>(v: unknown, allowed: T, field: string): T[number] => {
@@ -112,8 +114,8 @@ export function mountDuels(app: Hono<Env>, db: DatabaseSync, market: MarketData 
 
   const store = (d: DuelRow, userId: number, n: number, o: Outcome, timeout: boolean) => {
     db.prepare(
-      'UPDATE duel_decisions SET submitted_at = ?, side = ?, sl = ?, tp = ?, entry = ?, exit = ?, exit_time = ?, reason = ?, r = ? WHERE duel_id = ? AND round_no = ? AND user_id = ?',
-    ).run(now(), o.side, o.sl, o.tp, o.entry, o.exit, o.exitTime, timeout ? 'timeout' : o.reason, o.r, d.id, n, userId)
+      'UPDATE duel_decisions SET submitted_at = ?, side = ?, sl = ?, tp = ?, entry = ?, exit = ?, exit_time = ?, reason = ?, r = ?, order_type = ?, order_price = ? WHERE duel_id = ? AND round_no = ? AND user_id = ?',
+    ).run(now(), o.side, o.sl, o.tp, o.entry, o.exit, o.exitTime, timeout ? 'timeout' : o.reason, o.r, o.type ?? null, o.price ?? null, d.id, n, userId)
     if (n === d.rounds) {
       const total = decisions(d.id, userId).reduce((s, x) => s + (x.r ?? 0), 0)
       db.prepare('UPDATE duel_players SET finished_at = ?, total_r = ? WHERE duel_id = ? AND user_id = ?').run(now(), Math.round(total * 1000) / 1000, d.id, userId)
@@ -164,6 +166,8 @@ export function mountDuels(app: Hono<Env>, db: DatabaseSync, market: MarketData 
 
   const outcomeOut = (n: Norm, o: Outcome) => ({
     side: o.side,
+    type: o.type ?? 'market',
+    price: o.price === null || o.price === undefined ? null : normPrice(n, o.price),
     r: o.r,
     reason: o.reason,
     entry: o.entry === null ? null : normPrice(n, o.entry),
@@ -174,6 +178,8 @@ export function mountDuels(app: Hono<Env>, db: DatabaseSync, market: MarketData 
   })
   const rowOutcome = (x: DecisionRow): Outcome => ({
     side: (x.side ?? 'skip') as Outcome['side'],
+    type: (x.order_type ?? 'market') as Outcome['type'],
+    price: x.order_price,
     r: x.r ?? 0,
     reason: (x.reason ?? 'skip') as Outcome['reason'],
     entry: x.entry,
@@ -346,7 +352,8 @@ export function mountDuels(app: Hono<Env>, db: DatabaseSync, market: MarketData 
         timeout = true
       } else {
         const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? realPrice(norm, v) : null)
-        const dec: Decision = { side, sl: num(b.sl), tp: b.tp === null || b.tp === undefined ? null : num(b.tp) }
+        const type = b.type === undefined ? 'market' : pick(b.type, ['market', 'limit', 'stop'] as const, 'Jenis order')
+        const dec: Decision = { side, type, price: type === 'market' ? null : num(b.price), sl: num(b.sl), tp: b.tp === null || b.tp === undefined ? null : num(b.tp) }
         const stop = minStop(m1.slice(0, floorIdx(m1, r.cut_time) + 1))
         const err = checkDecision(dec, cut, stop, (x) => (x * norm.k).toFixed(2))
         if (err) throw new HttpError(400, err)

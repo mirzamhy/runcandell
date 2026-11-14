@@ -30,7 +30,7 @@ setFavicon()
 }
 import { AccountUI } from './account'
 import { BacktestUI } from './backtest/ui'
-import { DuelUI, type DuelMarker } from './duel'
+import { DuelUI, type DuelLine, type DuelMarker, type LineField } from './duel'
 import type { BtTrade } from './backtest/run'
 import { SeriesStore, TIMEFRAMES, dataSpan, loadManifest, type Bar, type Manifest, type TF } from './data'
 import { ChartSettingsDialog, alpha, applyLook, loadLook } from './chartsettings'
@@ -399,23 +399,128 @@ function setBacktest(open: boolean) {
 
 // ---------- duel (F6) ----------
 
-const duelBarEl = $('duel-bar')
+const duelPanelEl = $('duel-panel')
+const duelQuickEl = $('duel-quick')
 const pricePick = $('price-pick')
 const duelMarkersApi = createSeriesMarkers(candles, [])
 let duelMarks: DuelMarker[] = []
 let savedDrawings: Drawing[] | null = null
 let savedTF: TF = tf
 let pickResolve: ((p: number | null) => void) | null = null
-const duelLines = (['entry', 'sl', 'tp'] as const).map((k) =>
-  candles.createPriceLine({
-    price: 0,
-    color: k === 'entry' ? '#c9d1d9' : k === 'sl' ? '#ef5350' : '#26a69a',
-    lineWidth: 1,
-    lineStyle: k === 'entry' ? LineStyle.Solid : LineStyle.Dashed,
-    axisLabelVisible: false,
-    lineVisible: false,
-    title: k === 'entry' ? 'Entry' : k.toUpperCase(),
-  }),
+const duelLines = new Map<LineField, { line: ReturnType<typeof candles.createPriceLine>; spec: DuelLine }>()
+
+function setDuelLines(list: DuelLine[]) {
+  const want = new Set(list.map((l) => l.field))
+  for (const [f, x] of duelLines) {
+    if (!want.has(f)) {
+      candles.removePriceLine(x.line)
+      duelLines.delete(f)
+    }
+  }
+  for (const spec of list) {
+    // keep the line under the pointer where the user is dragging it
+    const price = duelDrag?.field === spec.field && duelDrag.moved ? duelDrag.price : spec.price
+    const opts = {
+      price,
+      color: spec.color,
+      lineWidth: (spec.field === 'entry' ? 2 : 1) as 1 | 2,
+      lineStyle: spec.solid ? LineStyle.Solid : LineStyle.Dashed,
+      axisLabelVisible: true,
+      title: spec.drag ? `${spec.title}  ⇕` : spec.title,
+    }
+    const x = duelLines.get(spec.field)
+    if (x) {
+      x.line.applyOptions(opts)
+      x.spec = spec
+    } else duelLines.set(spec.field, { line: candles.createPriceLine(opts), spec })
+  }
+}
+
+// dragging the order / SL / TP lines, and a plain click that sets a limit/stop price
+let duelDrag: { field: LineField; startY: number; moved: boolean; price: number } | null = null
+let duelPress: { x: number; y: number } | null = null
+
+function duelLocal(e: PointerEvent) {
+  const r = chartEl.getBoundingClientRect()
+  return { x: e.clientX - r.left, y: e.clientY - r.top, inPane: e.clientY - r.top <= chart.panes()[0].getHeight() && e.clientX - r.left <= r.width }
+}
+
+function duelHit(y: number): LineField | null {
+  let best: { f: LineField; d: number } | null = null
+  for (const [f, x] of duelLines) {
+    if (!x.spec.drag) continue
+    const ly = candles.priceToCoordinate(x.line.options().price)
+    if (ly === null) continue
+    // SL/TP can sit on the entry: prefer them
+    const d = Math.abs(ly - y) + (f === 'entry' ? 1.5 : 0)
+    if (Math.abs(ly - y) <= 8 && (!best || d < best.d)) best = { f, d }
+  }
+  return best?.f ?? null
+}
+
+chartWrap.addEventListener(
+  'pointerdown',
+  (e) => {
+    if (!duelBars || !duel.play || duel.play.revealed || e.button !== 0 || pickResolve) return
+    const { x, y, inPane } = duelLocal(e)
+    if (!inPane) return
+    const f = duelHit(y)
+    if (!f) {
+      duelPress = { x, y }
+      return
+    }
+    e.stopPropagation()
+    e.preventDefault()
+    duelDrag = { field: f, startY: y, moved: false, price: duelLines.get(f)!.line.options().price }
+    chartWrap.setPointerCapture(e.pointerId)
+    chart.applyOptions({ handleScroll: false, handleScale: false })
+  },
+  true,
+)
+chartWrap.addEventListener(
+  'pointermove',
+  (e) => {
+    if (!duelBars || !duel.play || duel.play.revealed) return
+    const { y } = duelLocal(e)
+    const d = duelDrag
+    if (!d) {
+      const f = duelHit(y)
+      if (f) chartWrap.style.cursor = 'ns-resize'
+      else if (chartWrap.style.cursor === 'ns-resize') chartWrap.style.cursor = ''
+      return
+    }
+    e.stopPropagation()
+    if (!d.moved && Math.abs(y - d.startY) < 3) return
+    d.moved = true
+    const p = candles.coordinateToPrice(y)
+    if (p === null) return
+    d.price = Math.round(p * 100) / 100
+    duel.dragLine(d.field, d.price)
+  },
+  true,
+)
+chartWrap.addEventListener(
+  'pointerup',
+  (e) => {
+    const press = duelPress
+    duelPress = null
+    if (duelDrag) {
+      e.stopPropagation()
+      const d = duelDrag
+      duelDrag = null
+      if (chartWrap.hasPointerCapture(e.pointerId)) chartWrap.releasePointerCapture(e.pointerId)
+      chart.applyOptions({ handleScroll: true, handleScale: true })
+      if (d.moved) duel.dragLine(d.field, d.price)
+      return
+    }
+    // a click that did not pan the chart and is not drawing: price for a limit/stop order
+    if (!press || !duelBars || drawings.tool !== 'cursor') return
+    const { x, y } = duelLocal(e)
+    if (Math.hypot(x - press.x, y - press.y) > 4 || drawings.hitAt(x, y)) return
+    const p = candles.coordinateToPrice(y)
+    if (p !== null) duel.chartClick(p)
+  },
+  true,
 )
 
 /** A store over fixed bars (duel snapshot): no chunks, never loads. */
@@ -436,15 +541,14 @@ function syncDuelMarkers() {
   duelMarkersApi.setMarkers(out)
 }
 
-new ResizeObserver(() => chartWrap.style.setProperty('--duel-h', `${duelBarEl.offsetHeight || 44}px`)).observe(duelBarEl)
-
 function setDuelUI(on: boolean) {
   document.body.classList.toggle('duel', on)
-  duelBarEl.hidden = !on
+  duelPanelEl.hidden = !on
+  if (!on) duelQuickEl.hidden = true
   for (const el of [gotoInput, gotoForm.querySelector('button')!, replayBtn, btBtn]) (el as HTMLButtonElement).disabled = on
 }
 
-const duel = new DuelUI(duelBarEl, {
+const duel = new DuelUI(duelPanelEl, duelQuickEl, {
   requireLogin: () => account.requireLogin(),
   enter: (bars, hardcore) => {
     if (replay) {
@@ -478,7 +582,7 @@ const duel = new DuelUI(duelBarEl, {
   exit: () => {
     duelBars = null
     duelMarks = []
-    for (const l of duelLines) l.applyOptions({ lineVisible: false, axisLabelVisible: false })
+    setDuelLines([])
     duelMarkersApi.setMarkers([])
     setDuelUI(false)
     drawings.load(savedDrawings ?? [])
@@ -493,13 +597,7 @@ const duel = new DuelUI(duelBarEl, {
       showLatest(160)
     })
   },
-  setLines: (l) => {
-    const v = [l.entry, l.sl, l.tp]
-    duelLines.forEach((line, i) => {
-      const p = v[i]
-      line.applyOptions(p === null ? { lineVisible: false, axisLabelVisible: false } : { price: p, lineVisible: true, axisLabelVisible: true })
-    })
-  },
+  setLines: (l) => setDuelLines(l),
   setMarkers: (m) => {
     duelMarks = m
     syncDuelMarkers()
@@ -1080,6 +1178,11 @@ function buildContextMenu() {
         { label: 'Hapus gambar', hint: 'Del', danger: true, act: () => drawings.removeSelected() },
         'sep',
       )
+    }
+
+    if (duelBars && price !== null) {
+      const d = duel.menuAt(price)
+      if (d.length) items.push(...d.map((x) => ({ label: x.label, hint: 'order', act: x.act })), 'sep')
     }
 
     const acc = replay ? trade.account : null

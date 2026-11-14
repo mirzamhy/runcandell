@@ -17,7 +17,7 @@ const app = document.getElementById('app')!
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
 const fmtR = (r: number | null | undefined) => (r === null || r === undefined ? '–' : `${r > 0 ? '+' : ''}${r.toFixed(2)}R`)
 const tone = (n: number | null | undefined) => (!n ? '' : n > 0 ? 'pos' : 'neg')
-const REASON: Record<string, string> = { tp: 'TP', sl: 'SL', time: 'Waktu habis', skip: 'Skip', timeout: 'Telat', stopout: 'Stop-out' }
+const REASON: Record<string, string> = { tp: 'TP', sl: 'SL', time: 'Waktu habis', skip: 'Skip', timeout: 'Telat', stopout: 'Stop-out', unfilled: 'Order tak tersentuh' }
 const SIDE: Record<string, string> = { buy: 'BUY', sell: 'SELL', skip: 'SKIP' }
 
 let me: User | null = null
