@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0e0b1f" />
+    <title>duelcandle · Duel</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Unbounded:wght@600;700;800&display=swap" rel="stylesheet" />
+  </head>
+  <body class="duel-page">
+    <header class="dp-top">
+      <a class="brand" href="/" title="Ke arena"><span class="logo"></span>duelcandle</a>
+      <nav class="dp-nav">
+        <a href="/">Arena</a>
+        <a href="/chart.html">Chart</a>
+        <a href="/duel.html" aria-current="page">Duel</a>
+      </nav>
+      <span class="dp-me" id="me"></span>
+    </header>
+    <main id="app" class="dp-main"><p class="dp-loading">Memuat…</p></main>
+    <div class="dp-toasts" id="toasts" aria-live="polite"></div>
+    <script type="module" src="/src/duelpage/main.ts"></script>
+  </body>
+</html>

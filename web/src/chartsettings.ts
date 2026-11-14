@@ -36,8 +36,8 @@ export interface Look {
 
 export const DEFAULT_LOOK: Look = {
   candle: 'solid',
-  up: '#26a69a',
-  down: '#ef5350',
+  up: '#2fd4b0',
+  down: '#ff6b5e',
   body: true,
   border: false,
   wick: true,
@@ -45,13 +45,13 @@ export const DEFAULT_LOOK: Look = {
   borderDown: null,
   wickUp: null,
   wickDown: null,
-  bg: '#0b0e14',
+  bg: '#0e0b1f',
   bg2: null,
   grid: 'both',
-  gridColor: '#141924',
+  gridColor: '#1a1636',
   crosshair: 'normal',
   scale: 'normal',
-  textColor: '#7d8590',
+  textColor: '#a39bc6',
   fontSize: 12,
   bidAsk: true,
   volume: true,
@@ -61,11 +61,12 @@ export const DEFAULT_LOOK: Look = {
 
 /** Ready-made looks, a quick start before fine-tuning. */
 export const THEMES: { name: string; look: Partial<Look> }[] = [
-  { name: 'Gelap (bawaan)', look: {} },
+  { name: 'Arena (bawaan)', look: {} },
+  { name: 'Gelap netral', look: { up: '#26a69a', down: '#ef5350', bg: '#0b0e14', gridColor: '#141924', textColor: '#7d8590' } },
   { name: 'TradingView klasik', look: { up: '#089981', down: '#f23645', bg: '#131722', gridColor: '#1e222d', textColor: '#b2b5be' } },
   { name: 'Kosong', look: { candle: 'hollow', up: '#e6e9ef', down: '#6b7280', border: true, grid: 'none', bg: '#000000' } },
   { name: 'Terang', look: { up: '#089981', down: '#f23645', bg: '#ffffff', gridColor: '#f0f3fa', textColor: '#131722' } },
-  { name: 'Ungu arena', look: { up: '#09bbc8', down: '#e0457b', bg: '#14102a', bg2: '#0b0e14', gridColor: '#221b45', textColor: '#9a8fc4' } },
+  { name: 'Ungu malam', look: { up: '#09bbc8', down: '#e0457b', bg: '#1b1540', bg2: '#07060f', gridColor: '#241d4f', textColor: '#9a8fc4' } },
 ]
 
 const KEY = 'rc.v1.look'

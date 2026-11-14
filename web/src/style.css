@@ -1,15 +1,4 @@
-:root {
-  --bg: #0b0e14;
-  --panel: #11151d;
-  --border: #1e2430;
-  --text: #c9d1d9;
-  --muted: #7d8590;
-  --accent: #f5a524;
-  --up: #26a69a;
-  --down: #ef5350;
-  --hover: #1a2030;
-  color-scheme: dark;
-}
+@import './shared/theme.css';
 
 * {
   box-sizing: border-box;
@@ -27,7 +16,7 @@ body {
   grid-template-columns: minmax(0, 1fr);
   background: var(--bg);
   color: var(--text);
-  font: 13px/1.4 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font: 13px/1.4 var(--font);
   overflow: hidden;
 }
 
@@ -69,12 +58,6 @@ input:focus-visible {
   background: var(--panel);
 }
 
-.brand {
-  text-decoration: none;
-  font-weight: 700;
-  color: var(--accent);
-  letter-spacing: 0.02em;
-}
 
 .symbol {
   font-weight: 600;
@@ -499,14 +482,15 @@ input:focus-visible {
 }
 
 button.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #111;
-  font-weight: 600;
+  background: var(--cta);
+  border-color: transparent;
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 4px 16px rgba(255, 42, 42, 0.25);
 }
 
 button.primary:hover {
-  background: color-mix(in srgb, var(--accent) 85%, white);
+  filter: brightness(1.12);
 }
 
 /* ---------- replay + paper trading ---------- */
@@ -2653,4 +2637,30 @@ body.duel .pane-layer {
 }
 .cs-foot .danger {
   color: var(--down);
+}
+
+/* topbar fits one row on laptop widths */
+@media (max-width: 1440px) {
+  .topbar {
+    gap: 6px;
+  }
+  .goto input {
+    width: 168px;
+  }
+  #zone {
+    max-width: 112px;
+  }
+  .topbar .symbol {
+    display: none;
+  }
+  .tfs button {
+    padding-inline: 7px;
+  }
+  /* words are enough here; the icons come back on wide screens */
+  #ind-btn svg,
+  #replay-btn svg,
+  #bt-btn svg,
+  #duel-btn svg {
+    display: none;
+  }
 }

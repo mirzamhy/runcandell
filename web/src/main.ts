@@ -17,6 +17,17 @@ import {
   type UTCTimestamp,
 } from 'lightweight-charts'
 import './style.css'
+import { mountLogos, setFavicon } from './shared/brand'
+
+mountLogos()
+setFavicon()
+
+// old links: the duel lobby has its own page now
+{
+  const q = new URLSearchParams(location.search)
+  if (q.get('duel')) location.replace(`/duel.html?code=${encodeURIComponent(q.get('duel')!)}`)
+  else if (q.get('open') === 'duel') location.replace('/duel.html')
+}
 import { AccountUI } from './account'
 import { BacktestUI } from './backtest/ui'
 import { DuelUI, type DuelMarker } from './duel'
@@ -433,7 +444,7 @@ function setDuelUI(on: boolean) {
   for (const el of [gotoInput, gotoForm.querySelector('button')!, replayBtn, btBtn, duelBtn]) (el as HTMLButtonElement).disabled = on
 }
 
-const duel = new DuelUI($<HTMLDialogElement>('duel-dialog'), duelBarEl, {
+const duel = new DuelUI(duelBarEl, {
   requireLogin: () => account.requireLogin(),
   enter: (bars, hardcore) => {
     if (replay) {
@@ -1184,7 +1195,7 @@ function buildControls() {
   chart.timeScale().subscribeVisibleLogicalRangeChange(onRangeChange)
   buildReplayControls()
   btBtn.addEventListener('click', () => setBacktest(!btOpen()))
-  duelBtn.addEventListener('click', () => void duel.open())
+  duelBtn.addEventListener('click', () => duel.open())
 }
 
 if (import.meta.env.DEV) {
@@ -1231,9 +1242,15 @@ async function boot() {
   showLatest(160)
   void account.init().then(() => {
     const q = new URLSearchParams(location.search)
-    const code = q.get('duel')
-    if (code) void duel.open(code)
-    else if (q.get('open') === 'duel') void duel.open()
+    const play = q.get('play')
+    const n = Number(q.get('round'))
+    if (play && n > 0) {
+      // came from the duel page: play this round, keep the URL clean for reloads
+      history.replaceState(null, '', location.pathname)
+      void account.requireLogin().then((ok) => {
+        if (ok) void duel.startRound(play.toUpperCase(), n)
+      })
+    }
   })
   gotoInput.value = toInputValue(displayTime(store.bars[store.bars.length - 1].time))
   showOverlay(null)

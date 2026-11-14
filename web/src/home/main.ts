@@ -1,19 +1,20 @@
 /** Arena home: guest login, then the dashboard (duel, chart, leaderboard). */
 import { ApiError, api, duelApi, statsApi, type DuelListItem, type Stats, type User } from '../api'
 import type { Arena3D } from './arena3d'
+import { mountLogos } from '../shared/brand'
 import { EYES_SIGIL, maskEyesSvg, maskSvg } from './mask'
 import './home.css'
 
-// old share links pointed at "/?duel=CODE": the duel lives on the chart page now
+// old share links pointed at "/?duel=CODE": duels have their own page now
 const params = new URLSearchParams(location.search)
-if (params.get('duel')) location.replace(`/chart.html?duel=${encodeURIComponent(params.get('duel')!)}`)
+if (params.get('duel')) location.replace(`/duel.html?code=${encodeURIComponent(params.get('duel')!)}`)
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 const fmtR = (r: number) => `${r > 0 ? '+' : ''}${r.toFixed(1)}R`
 const tone = (r: number) => (r > 0 ? 'pos' : r < 0 ? 'neg' : '')
 
-for (const el of document.querySelectorAll('.logo')) el.innerHTML = maskSvg()
+mountLogos()
 for (const el of document.querySelectorAll('.mask-fallback')) el.innerHTML = maskSvg()
 for (const el of document.querySelectorAll('.avatar')) el.innerHTML = EYES_SIGIL
 $('intro-eyes').innerHTML = maskEyesSvg()
@@ -197,7 +198,7 @@ const joinForm = $<HTMLFormElement>('join-form')
 joinForm.addEventListener('submit', (e) => {
   e.preventDefault()
   const code = (joinForm.elements.namedItem('code') as HTMLInputElement).value.trim().toUpperCase()
-  if (code) location.href = `/chart.html?duel=${encodeURIComponent(code)}`
+  if (code) location.href = `/duel.html?code=${encodeURIComponent(code)}`
 })
 
 function renderStats(s: Stats | null) {
@@ -230,12 +231,19 @@ function renderActive(items: DuelListItem[]) {
   $('active-list').innerHTML = open
     .map((d) => {
       const vs = d.mode === 'solo' ? 'Solo' : d.players.length < 2 ? 'Menunggu lawan' : `vs ${esc(d.players.map((p) => p.nickname).join(' / '))}`
-      return `<li><a href="/chart.html?duel=${d.code}"><span><b>${d.code}</b> · ${vs}</span><span class="meta">Ronde ${d.nextRound}/${d.rounds} · lanjut</span></a></li>`
+      return `<li><a href="/duel.html?code=${d.code}"><span><b>${d.code}</b> · ${vs}</span><span class="meta">Ronde ${d.nextRound}/${d.rounds} · lanjut</span></a></li>`
     })
     .join('')
 }
 
 async function enter(user: User) {
+  // signed in from another page (e.g. a duel link): go back there
+  const next = sessionStorage.getItem('rc.next')
+  if (next && next.startsWith('/')) {
+    sessionStorage.removeItem('rc.next')
+    location.href = next
+    return
+  }
   $('me-name').textContent = user.nickname
   $('greet').textContent = `Selamat datang, ${user.nickname}`
   show('dash')

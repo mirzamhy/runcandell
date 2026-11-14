@@ -31,6 +31,6 @@ export default defineConfig({
   server: { port: 5200, strictPort: true, proxy: { '/api': 'http://127.0.0.1:5201' } },
   worker: { format: 'es' },
   // three.js alone is ~520 kB; it loads lazily on the home page only
-  // two pages: arena home (login + dashboard) and the chart app
-  build: { chunkSizeWarningLimit: 600, rolldownOptions: { input: { main: resolve(import.meta.dirname, 'index.html'), chart: resolve(import.meta.dirname, 'chart.html') } } },
+  // three pages: arena home (login + dashboard), the chart app, the duel lobby
+  build: { chunkSizeWarningLimit: 600, rolldownOptions: { input: { main: resolve(import.meta.dirname, 'index.html'), chart: resolve(import.meta.dirname, 'chart.html'), duel: resolve(import.meta.dirname, 'duel.html') } } },
 })
