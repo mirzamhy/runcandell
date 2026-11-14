@@ -13,6 +13,7 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { createHash, randomBytes } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import { mountDuels } from './duel.ts'
+import { checkEmail, checkPassword, dummyHash, hashPassword, loginBrake, verifyPassword } from './password.ts'
 import { googleJwks, suggestNickname, verifyGoogleToken, type JwksSource } from './google.ts'
 import { HttpError, idParam, int, json, obj, str } from './http.ts'
 import { singleMarket, type MarketData, type MarketSource } from './market.ts'
@@ -114,6 +115,55 @@ export function createApp(db: DatabaseSync, opt: AppOptions) {
     return c.json({ user: { id, nickname }, recoveryCode: code }, 201)
   })
 
+  // ---------- email + password ----------
+
+  const brake = loginBrake(now)
+  // per IP looser: behind a proxy without X-Forwarded-For everyone shares one address
+  const ipBrake = loginBrake(now, 40)
+  const ipOf = (c: Context) => c.req.header('x-forwarded-for')?.split(',')[0].trim() ?? 'local'
+  const emailTaken = (e: string) => !!db.prepare('SELECT 1 FROM users WHERE login_email = ?').get(e)
+
+  app.post('/api/auth/register', limitJson, async (c) => {
+    const body = await json(c)
+    const nickname = checkNick(body.nickname)
+    const email = checkEmail(body.email)
+    const password = checkPassword(body.password)
+    if (emailTaken(email)) throw new HttpError(409, 'Email sudah terdaftar. Masuk saja, atau pakai email lain.')
+    const done = signupSlot(c)
+    const hash = await hashPassword(password)
+    // the recovery code stays unknown until asked for in the account dialog
+    const r = db
+      .prepare('INSERT INTO users (nickname, recovery_hash, login_email, password_hash, created_at) VALUES (?, ?, ?, ?, ?)')
+      .run(nickname, sha(token(32)), email, hash, now())
+    done()
+    const id = Number(r.lastInsertRowid)
+    startSession(c, id)
+    return c.json({ user: { id, nickname } }, 201)
+  })
+
+  /** `login` is the email, or the nickname of an account that has a password */
+  app.post('/api/auth/login', limitJson, async (c) => {
+    const body = await json(c)
+    const login = str(body.login, 'Email atau nickname', 254, 3).toLowerCase()
+    const password = typeof body.password === 'string' ? body.password : ''
+    const key = `login:${login}`
+    const ip = `ip:${ipOf(c)}`
+    brake.check(key)
+    ipBrake.check(ip)
+    const u = db
+      .prepare(`SELECT id, nickname, password_hash FROM users WHERE ${login.includes('@') ? 'login_email = ?' : 'nickname = ?'}`)
+      .get(login) as (User & { password_hash: string | null }) | undefined
+    const ok = await verifyPassword(password.slice(0, 200), u?.password_hash ?? (await dummyHash()))
+    if (!u || !u.password_hash || !ok) {
+      brake.miss(key)
+      ipBrake.miss(ip)
+      throw new HttpError(401, 'Email/nickname atau password salah.')
+    }
+    brake.clear(key)
+    startSession(c, u.id)
+    return c.json({ user: { id: u.id, nickname: u.nickname } })
+  })
+
   // ---------- Google ----------
 
   const jwks = opt.google ? (opt.google.jwks ?? googleJwks()) : null
@@ -189,8 +239,40 @@ export function createApp(db: DatabaseSync, opt: AppOptions) {
 
   app.get('/api/me', (c) => {
     const u = c.get('user')
-    const g = db.prepare('SELECT email, google_sub FROM users WHERE id = ?').get(u.id) as { email: string | null; google_sub: string | null }
-    return c.json({ user: { ...u, google: g.google_sub ? { email: g.email } : null } })
+    const g = db.prepare('SELECT email, google_sub, login_email FROM users WHERE id = ?').get(u.id) as {
+      email: string | null
+      google_sub: string | null
+      login_email: string | null
+    }
+    return c.json({ user: { ...u, google: g.google_sub ? { email: g.email } : null, login: g.login_email ? { email: g.login_email } : null } })
+  })
+
+  /**
+   * Add email + password to an account (guest / Google), or change the password.
+   * Changing it needs the current one and signs out every other device.
+   */
+  app.post('/api/me/password', limitJson, async (c) => {
+    const u = c.get('user')
+    const body = await json(c)
+    const password = checkPassword(body.password)
+    const row = db.prepare('SELECT login_email, password_hash FROM users WHERE id = ?').get(u.id) as { login_email: string | null; password_hash: string | null }
+    if (row.password_hash) {
+      const key = `me:${u.id}`
+      brake.check(key)
+      if (!(await verifyPassword(typeof body.current === 'string' ? body.current : '', row.password_hash))) {
+        brake.miss(key)
+        throw new HttpError(401, 'Password sekarang salah.')
+      }
+      brake.clear(key)
+      db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(await hashPassword(password), u.id)
+      const t = getCookie(c, COOKIE) ?? ''
+      db.prepare('DELETE FROM sessions WHERE user_id = ? AND token_hash != ?').run(u.id, sha(t))
+      return c.json({ ok: true, email: row.login_email })
+    }
+    const email = checkEmail(body.email)
+    if (emailTaken(email)) throw new HttpError(409, 'Email sudah dipakai akun lain.')
+    db.prepare('UPDATE users SET login_email = ?, password_hash = ? WHERE id = ?').run(email, await hashPassword(password), u.id)
+    return c.json({ ok: true, email })
   })
 
   /** New recovery code; the old one stops working. */

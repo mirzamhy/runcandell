@@ -1386,6 +1386,19 @@ section.bt td.sell {
 .acct-cols .g-btn {
   min-height: 44px;
 }
+/* its iframe paints an opaque white box under a dark color-scheme page; light keeps it transparent */
+.g-btn iframe {
+  color-scheme: light;
+}
+.acct-more > summary {
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+.acct-more > summary:hover {
+  color: var(--text);
+}
 .acct-code code {
   display: block;
   margin: 8px 0;

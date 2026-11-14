@@ -127,6 +127,12 @@ const MIGRATIONS = [
   ALTER TABLE users ADD COLUMN email TEXT;
   CREATE UNIQUE INDEX users_google ON users(google_sub);
   `,
+  // email + password sign-in (login_email is stored lowercased; email above stays Google's)
+  `
+  ALTER TABLE users ADD COLUMN login_email TEXT;
+  ALTER TABLE users ADD COLUMN password_hash TEXT;
+  CREATE UNIQUE INDEX users_login_email ON users(login_email);
+  `,
 ]
 
 export function openDb(path: string): DatabaseSync {

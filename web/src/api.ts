@@ -37,6 +37,8 @@ export interface User {
   nickname: string
   /** set when the account signs in with Google (only on /me) */
   google?: { email: string | null } | null
+  /** email + password sign-in (only on /me) */
+  login?: { email: string } | null
 }
 
 /** answer of POST /auth/google: signed in / linked, or a new account that still needs a nickname */
@@ -101,6 +103,9 @@ export const api = {
   recover: (code: string) => call<{ user: User }>('POST', '/auth/recover', { code }),
   logout: () => call<{ ok: true }>('POST', '/auth/logout'),
   newRecovery: () => call<{ recoveryCode: string }>('POST', '/me/recovery'),
+  register: (b: { nickname: string; email: string; password: string }) => call<{ user: User }>('POST', '/auth/register', b),
+  login: (login: string, password: string) => call<{ user: User }>('POST', '/auth/login', { login, password }),
+  setPassword: (b: { email?: string; password: string; current?: string }) => call<{ ok: true; email: string }>('POST', '/me/password', b),
   authConfig: () => call<{ googleClientId: string | null }>('GET', '/auth/config'),
   google: (credential: string, nickname?: string) => call<GoogleResult>('POST', '/auth/google', { credential, nickname }),
 

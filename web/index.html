@@ -30,7 +30,7 @@
         <nav>
           <a href="#fitur">Fitur</a>
           <a href="#cara">Cara main</a>
-          <a class="btn ghost sm" href="#daftar">Buat akun</a>
+          <a class="btn ghost sm" href="#daftar" data-pane="register">Buat akun</a>
         </nav>
       </header>
 
@@ -42,40 +42,58 @@
         </div>
 
         <section class="card" id="daftar">
+          <div class="tabs" role="tablist" id="auth-tabs" aria-label="Masuk atau daftar">
+            <button type="button" role="tab" data-to="login" aria-selected="true">Masuk</button>
+            <button type="button" role="tab" data-to="register" aria-selected="false">Daftar</button>
+          </div>
           <div class="g-login" id="g-login" hidden>
             <div class="g-btn" id="g-btn"></div>
-            <p class="or"><span>atau pakai nickname</span></p>
+            <p class="or">atau pakai email</p>
           </div>
+          <form id="login-form" class="stack">
+            <label>Email atau nickname<input name="login" autocomplete="username" spellcheck="false" autocapitalize="off" required /></label>
+            <label class="pw">Password<input name="password" type="password" autocomplete="current-password" required /><button type="button" class="eye" aria-label="Tampilkan password" aria-pressed="false"></button></label>
+            <button class="btn primary" type="submit">Masuk arena</button>
+            <p class="alt">Akun tamu tanpa email? <button class="link" type="button" data-to="recover">Masuk pakai kode pemulihan</button></p>
+          </form>
+          <form id="register-form" class="stack" hidden>
+            <label>Nickname<input name="nickname" autocomplete="nickname" placeholder="contoh: goldhunter" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]{3,20}" required /></label>
+            <small class="hint">Tampil di arena dan leaderboard. 3–20 karakter: huruf, angka, _</small>
+            <label>Email<input name="email" type="email" autocomplete="email" spellcheck="false" autocapitalize="off" required /></label>
+            <label class="pw">Password<input name="password" type="password" autocomplete="new-password" minlength="8" maxlength="200" required /><button type="button" class="eye" aria-label="Tampilkan password" aria-pressed="false"></button></label>
+            <small class="hint">Minimal 8 karakter.</small>
+            <button class="btn primary" type="submit">Buat akun &amp; masuk arena</button>
+            <p class="alt">Cuma mau coba? <button class="link" type="button" data-to="guest">Main sebagai tamu</button></p>
+          </form>
+          <form id="guest-form" class="stack" hidden>
+            <h2>Akun tamu</h2>
+            <p>Cukup nickname. Kamu dapat kode pemulihan untuk masuk lagi dari perangkat lain; email dan password bisa ditambah nanti.</p>
+            <label>Nickname<input name="nickname" autocomplete="nickname" placeholder="contoh: goldhunter" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]{3,20}" required /></label>
+            <button class="btn primary" type="submit">Masuk sebagai tamu</button>
+            <p class="alt"><button class="link" type="button" data-to="register">← Daftar pakai email</button></p>
+          </form>
+          <form id="recover-form" class="stack" hidden>
+            <h2>Kode pemulihan</h2>
+            <p>Tempel kode yang kamu simpan waktu membuat akun tamu.</p>
+            <label>Kode pemulihan<input name="code" autocomplete="off" spellcheck="false" placeholder="rc-…" required /></label>
+            <button class="btn primary" type="submit">Masuk</button>
+            <p class="alt"><button class="link" type="button" data-to="login">← Masuk pakai email</button></p>
+          </form>
           <form id="gnick-form" class="stack" hidden>
             <h2>Satu langkah lagi</h2>
             <p>Pilih nickname untuk arena. Nama asli dan email Google tidak ditampilkan ke pemain lain.</p>
             <label>Nickname<input name="nickname" autocomplete="nickname" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]{3,20}" required /></label>
             <small class="hint">3–20 karakter: huruf, angka, _</small>
             <button class="btn primary" type="submit">Masuk arena</button>
-            <button class="btn ghost" type="button" data-to="guest">Batal</button>
-          </form>
-          <form id="guest-form" class="stack">
-            <h2>Buat akun</h2>
-            <p>Gratis. Cukup nickname, tanpa email dan password.</p>
-            <label>Nickname<input name="nickname" autocomplete="nickname" placeholder="contoh: goldhunter" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]{3,20}" required /></label>
-            <small class="hint">3–20 karakter: huruf, angka, _</small>
-            <button class="btn primary" type="submit">Buat akun &amp; masuk arena</button>
-            <button class="btn ghost" type="button" data-to="recover">Sudah punya akun? Pakai kode pemulihan</button>
-          </form>
-          <form id="recover-form" class="stack" hidden>
-            <h2>Masuk lagi</h2>
-            <p>Tempel kode pemulihan yang kamu simpan waktu buat akun.</p>
-            <label>Kode pemulihan<input name="code" autocomplete="off" spellcheck="false" placeholder="rc-…" required /></label>
-            <button class="btn primary" type="submit">Masuk</button>
-            <button class="btn ghost" type="button" data-to="guest">Belum punya akun? Buat baru</button>
+            <p class="alt"><button class="link" type="button" data-to="login">Batal</button></p>
           </form>
           <div id="code-box" class="stack" hidden>
             <h2>Simpan kode ini</h2>
-            <p>Ini satu-satunya cara masuk lagi dari perangkat lain. Kode cuma tampil sekali.</p>
+            <p>Ini cara masuk lagi dari perangkat lain. Kode cuma tampil sekali.</p>
             <code class="code" id="code-value"></code>
             <button class="btn ghost" type="button" id="code-copy">Salin kode</button>
             <div class="g-link" id="g-link-box" hidden>
-              <p class="or"><span>atau tanpa kode</span></p>
+              <p class="or">atau tanpa kode</p>
               <p>Tautkan akun Google: dari perangkat lain cukup masuk dengan Google.</p>
               <div class="g-btn" id="g-link"></div>
             </div>
@@ -102,11 +120,11 @@
         <p class="eyebrow">Cara main</p>
         <h2>Tiga langkah ke arena</h2>
         <ol class="steps">
-          <li><b>1</b><h3>Buat akun</h3><p>Pilih nickname, simpan kode pemulihan.</p></li>
+          <li><b>1</b><h3>Buat akun</h3><p>Daftar pakai Google atau email, pilih nickname arena.</p></li>
           <li><b>2</b><h3>Mulai duel</h3><p>Analisa potongan chart, pasang SL dan TP, kunci keputusan.</p></li>
           <li><b>3</b><h3>Lihat hasil</h3><p>Chart berjalan, skor R keluar, peringkat naik.</p></li>
         </ol>
-        <a class="btn primary" href="#daftar">Buat akun sekarang</a>
+        <a class="btn primary" href="#daftar" data-pane="register">Buat akun sekarang</a>
       </section>
 
       <footer class="foot">duelcandle · data XAUUSD dari MT5 · gratis untuk belajar, bukan saran investasi</footer>

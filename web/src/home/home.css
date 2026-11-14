@@ -197,9 +197,32 @@ body.no-gl .mask-fallback { display: block; }
 /* sign in with Google: Google draws the button itself (an iframe), we only centre it */
 .g-login, .g-link { display: flex; flex-direction: column; gap: 14px; }
 .g-btn { display: flex; justify-content: center; min-height: 44px; }
+/* Google's iframe paints an opaque white box under a dark color-scheme page; light keeps it transparent */
+.g-btn iframe { color-scheme: light; }
 .or { display: flex; align-items: center; gap: 10px; font-size: 12px !important; letter-spacing: 0.08em; text-transform: uppercase; }
 .or::before, .or::after { content: ''; flex: 1; height: 1px; background: var(--line); }
 .card p.ok { color: var(--up); }
+
+/* Masuk | Daftar */
+.tabs { display: grid; grid-template-columns: 1fr 1fr; padding: 4px; gap: 4px; border-radius: 14px; background: rgba(7, 6, 15, 0.55); border: 1px solid var(--line); }
+.tabs[hidden] { display: none; }
+.tabs button { padding: 10px; border: 0; border-radius: 10px; font: 600 14px var(--font); color: var(--muted); background: transparent; cursor: pointer; }
+.tabs button:hover { color: var(--text); }
+.tabs button[aria-selected='true'] { color: #fff; background: linear-gradient(135deg, rgba(138, 77, 255, 0.55), rgba(64, 95, 250, 0.45)); box-shadow: 0 2px 12px rgba(64, 95, 250, 0.25); }
+.tabs button:focus-visible, .link:focus-visible, .eye:focus-visible { outline: 2px solid var(--sapphire); outline-offset: 2px; }
+
+/* password with a show/hide eye inside the field */
+.card label.pw { position: relative; }
+.card label.pw input { padding-right: 46px; }
+.eye { position: absolute; right: 6px; bottom: 6px; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 9px; color: var(--muted); background: transparent; cursor: pointer; }
+.eye:hover { color: var(--text); background: rgba(217, 252, 237, 0.06); }
+.eye svg { width: 18px; height: 18px; }
+.eye[aria-pressed='true'] { color: var(--sapphire); }
+
+/* small secondary choices under a form: text links, never wider than the card */
+.card p.alt { font-size: 13px; text-align: center; }
+.link { padding: 0; border: 0; background: none; font: inherit; color: #b9c6ff; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.link:hover { color: #fff; }
 .skip { font-size: 13px; color: var(--muted); text-align: center; }
 .skip:hover { color: var(--text); }
 

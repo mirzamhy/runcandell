@@ -130,59 +130,67 @@ function enterLanding() {
 
 // ---------- login ----------
 
-const guestForm = $<HTMLFormElement>('guest-form')
-const recoverForm = $<HTMLFormElement>('recover-form')
-const gnickForm = $<HTMLFormElement>('gnick-form')
-const codeBox = $('code-box')
+type Pane = 'login' | 'register' | 'guest' | 'recover' | 'gnick' | 'code'
+const form = (id: string) => $<HTMLFormElement>(id)
+const panes: Record<Pane, HTMLElement> = {
+  login: form('login-form'),
+  register: form('register-form'),
+  guest: form('guest-form'),
+  recover: form('recover-form'),
+  gnick: form('gnick-form'),
+  code: $('code-box'),
+}
 const loginErr = $('login-err')
 const gLogin = $('g-login')
+const tabs = $('auth-tabs')
 let googleOn = false
+const HAS_ACCOUNT = 'rc.v1.hasAccount'
+const field = (f: HTMLFormElement, name: string) => (f.elements.namedItem(name) as HTMLInputElement).value.trim()
 
-function loginPane(p: 'guest' | 'recover' | 'code' | 'gnick') {
-  guestForm.hidden = p !== 'guest'
-  recoverForm.hidden = p !== 'recover'
-  gnickForm.hidden = p !== 'gnick'
-  codeBox.hidden = p !== 'code'
-  gLogin.hidden = !googleOn || (p !== 'guest' && p !== 'recover')
+function loginPane(p: Pane, focus = true) {
+  for (const [k, el] of Object.entries(panes)) el.hidden = k !== p
+  // tabs + Google only on the two main panes
+  const main = p === 'login' || p === 'register'
+  tabs.hidden = !main
+  for (const t of tabs.querySelectorAll<HTMLButtonElement>('[data-to]')) t.setAttribute('aria-selected', String(t.dataset.to === p))
+  gLogin.hidden = !googleOn || !main
   loginErr.hidden = true
-  ;({ guest: guestForm, recover: recoverForm, gnick: gnickForm, code: null })[p]?.querySelector('input')?.focus()
+  if (focus) panes[p].querySelector('input')?.focus()
 }
-for (const b of document.querySelectorAll<HTMLButtonElement>('[data-to]')) b.addEventListener('click', () => loginPane(b.dataset.to as 'guest' | 'recover'))
+for (const b of document.querySelectorAll<HTMLButtonElement>('#daftar [data-to]')) b.addEventListener('click', () => loginPane(b.dataset.to as Pane))
+for (const a of document.querySelectorAll<HTMLAnchorElement>('a[data-pane]')) a.addEventListener('click', () => loginPane(a.dataset.pane as Pane, false))
+
+// returning visitors see "Masuk" first, new ones "Daftar"
+const knownDevice = () => {
+  try {
+    return localStorage.getItem(HAS_ACCOUNT) === '1'
+  } catch {
+    return false
+  }
+}
+const firstPane = (): Pane => (knownDevice() ? 'login' : 'register')
+loginPane(firstPane(), false)
+
+// show / hide password
+for (const eye of document.querySelectorAll<HTMLButtonElement>('#daftar .eye')) {
+  eye.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>'
+  eye.addEventListener('click', () => {
+    const input = eye.parentElement!.querySelector('input')!
+    const show = input.type === 'password'
+    input.type = show ? 'text' : 'password'
+    eye.setAttribute('aria-pressed', String(show))
+    eye.setAttribute('aria-label', show ? 'Sembunyikan password' : 'Tampilkan password')
+    input.focus()
+  })
+}
 
 const showErr = (e: unknown) => {
   loginErr.textContent = e instanceof ApiError ? e.message : 'Gagal. Coba lagi.'
   loginErr.hidden = false
 }
 
-// Google: known account -> straight in; new account -> pick a nickname first
-let gCredential = ''
-async function onGoogle(credential: string) {
-  loginErr.hidden = true
-  try {
-    const r = await api.google(credential)
-    if ('needNickname' in r) {
-      gCredential = credential
-      ;(gnickForm.elements.namedItem('nickname') as HTMLInputElement).value = r.suggestion
-      loginPane('gnick')
-    } else void enter(r.user)
-  } catch (e) {
-    showErr(e)
-  }
-}
-gnickForm.addEventListener('submit', (e) => {
-  e.preventDefault()
-  void submit(gnickForm, async () => {
-    const r = await api.google(gCredential, (gnickForm.elements.namedItem('nickname') as HTMLInputElement).value.trim())
-    if ('user' in r) void enter(r.user)
-  })
-})
-void mountGoogleButton($('g-btn'), (c) => void onGoogle(c)).then((ok) => {
-  googleOn = ok
-  if (ok && (!guestForm.hidden || !recoverForm.hidden)) gLogin.hidden = false
-})
-
-async function submit(form: HTMLFormElement, run: () => Promise<void>) {
-  const btn = form.querySelector<HTMLButtonElement>('button[type=submit]')!
+async function submit(f: HTMLFormElement, run: () => Promise<void>) {
+  const btn = f.querySelector<HTMLButtonElement>('button[type=submit]')!
   btn.disabled = true
   loginErr.hidden = true
   try {
@@ -193,33 +201,38 @@ async function submit(form: HTMLFormElement, run: () => Promise<void>) {
     btn.disabled = false
   }
 }
+const on = (p: Pane, run: (f: HTMLFormElement) => Promise<void>) => {
+  const f = panes[p] as HTMLFormElement
+  f.addEventListener('submit', (e) => {
+    e.preventDefault()
+    void submit(f, () => run(f))
+  })
+}
 
-let pending: User | null = null
-guestForm.addEventListener('submit', (e) => {
-  e.preventDefault()
-  void submit(guestForm, async () => {
-    const r = await api.guest((guestForm.elements.namedItem('nickname') as HTMLInputElement).value.trim())
-    pending = r.user
-    $('code-value').textContent = r.recoveryCode
-    loginPane('code')
-    // the guest is signed in now: a Google account can be linked instead of keeping the code
-    const box = $('g-link-box')
-    void mountGoogleButton($('g-link'), (credential) => {
-      void api.google(credential).then(
-        () => {
-          box.innerHTML = '<p class="ok">Google tertaut. Kode di atas tetap bisa dipakai sebagai cadangan.</p>'
-        },
-        showErr,
-      )
-    }).then((ok) => (box.hidden = !ok))
-  })
+on('login', async (f) => {
+  const r = await api.login(field(f, 'login'), (f.elements.namedItem('password') as HTMLInputElement).value)
+  void enter(r.user)
 })
-recoverForm.addEventListener('submit', (e) => {
-  e.preventDefault()
-  void submit(recoverForm, async () => {
-    const r = await api.recover((recoverForm.elements.namedItem('code') as HTMLInputElement).value.trim())
-    void enter(r.user)
-  })
+on('register', async (f) => {
+  const r = await api.register({ nickname: field(f, 'nickname'), email: field(f, 'email'), password: (f.elements.namedItem('password') as HTMLInputElement).value })
+  void enter(r.user)
+})
+on('recover', async (f) => void enter((await api.recover(field(f, 'code'))).user))
+
+// guest: signed in at once, but first the recovery code (or link Google instead)
+let pending: User | null = null
+on('guest', async (f) => {
+  const r = await api.guest(field(f, 'nickname'))
+  pending = r.user
+  $('code-value').textContent = r.recoveryCode
+  loginPane('code')
+  const box = $('g-link-box')
+  box.hidden = false // laid out before Google measures the button
+  void mountGoogleButton($('g-link'), (credential) => {
+    void api.google(credential).then(() => {
+      box.innerHTML = '<p class="ok">Google tertaut. Kode di atas tetap bisa dipakai sebagai cadangan.</p>'
+    }, showErr)
+  }).then((ok) => (box.hidden = !ok))
 })
 $('code-copy').addEventListener('click', () => {
   void navigator.clipboard.writeText($('code-value').textContent ?? '').then(
@@ -231,13 +244,42 @@ $('code-done').addEventListener('click', () => {
   if (pending) void enter(pending)
 })
 
+// Google: known account -> straight in; new account -> pick a nickname first
+let gCredential = ''
+async function onGoogle(credential: string) {
+  loginErr.hidden = true
+  try {
+    const r = await api.google(credential)
+    if ('needNickname' in r) {
+      gCredential = credential
+      ;(panes.gnick.querySelector('input') as HTMLInputElement).value = r.suggestion
+      loginPane('gnick')
+    } else void enter(r.user)
+  } catch (e) {
+    showErr(e)
+  }
+}
+on('gnick', async (f) => {
+  const r = await api.google(gCredential, field(f, 'nickname'))
+  if ('user' in r) void enter(r.user)
+})
+// the button needs a laid-out box to size itself: show the slot, hide it again if Google is off
+gLogin.hidden = false
+void mountGoogleButton($('g-btn'), (c) => void onGoogle(c)).then((ok) => {
+  googleOn = ok
+  gLogin.hidden = !ok || tabs.hidden
+})
+
+function resetLogin() {
+  for (const el of Object.values(panes)) if (el instanceof HTMLFormElement) el.reset()
+  loginPane(firstPane(), false)
+}
+
 // ---------- dashboard ----------
 
 $('logout').addEventListener('click', () => {
   void api.logout().finally(() => {
-    guestForm.reset()
-    recoverForm.reset()
-    loginPane('guest')
+    resetLogin()
     arena?.setStill(false)
     show('login')
   })
@@ -286,6 +328,11 @@ function renderActive(items: DuelListItem[]) {
 }
 
 async function enter(user: User) {
+  try {
+    localStorage.setItem(HAS_ACCOUNT, '1')
+  } catch {
+    /* private mode */
+  }
   // signed in from another page (e.g. a duel link): go back there
   const next = sessionStorage.getItem('rc.next')
   if (next && next.startsWith('/')) {

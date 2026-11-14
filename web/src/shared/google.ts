@@ -77,7 +77,8 @@ export async function mountGoogleButton(el: HTMLElement, onCredential: (credenti
     text,
     shape: 'pill',
     locale: 'id',
-    width: Math.min(400, Math.max(200, Math.round(el.clientWidth || 320))),
+    // hidden slot (width 0): a width that fits a phone card
+    width: Math.min(400, Math.max(200, Math.round(el.clientWidth || 280))),
     click_listener: () => (target = onCredential),
   })
   return true

@@ -228,24 +228,42 @@ export class AccountUI {
     if (!this.user)
       return `
         <div class="acct-cols">
-          <section class="bt-card">
-            <h4>Masuk cepat</h4>
-            <p class="bt-hint">Pakai akun Google. Tanpa password, tanpa kode pemulihan, bisa dari perangkat mana saja.</p>
-            <div class="g-btn" data-g="login"></div>
-          </section>
-          <form class="bt-card" data-f="guest">
-            <h4>Akun baru</h4>
-            <p class="bt-hint">Cukup nickname, tanpa email dan password. Setelah dibuat kamu dapat kode pemulihan untuk masuk dari perangkat lain.</p>
+          <form class="bt-card" data-f="login">
+            <h4>Masuk</h4>
+            <label class="bt-f"><span>Email / nickname</span><input name="login" required autocomplete="username" spellcheck="false" autocapitalize="off" /></label>
+            <label class="bt-f"><span>Password</span><input name="password" type="password" required autocomplete="current-password" /></label>
+            <button type="submit" class="primary">Masuk</button>
+          </form>
+          <form class="bt-card" data-f="register">
+            <h4>Daftar</h4>
             <label class="bt-f"><span>Nickname</span><input name="nickname" required minlength="3" maxlength="20" pattern="[A-Za-z0-9_]+" autocomplete="nickname" placeholder="huruf, angka, _" /></label>
+            <label class="bt-f"><span>Email</span><input name="email" type="email" required autocomplete="email" spellcheck="false" autocapitalize="off" /></label>
+            <label class="bt-f"><span>Password</span><input name="password" type="password" required minlength="8" maxlength="200" autocomplete="new-password" placeholder="minimal 8 karakter" /></label>
             <button type="submit" class="primary">Buat akun</button>
           </form>
-          <form class="bt-card" data-f="recover">
-            <h4>Sudah punya akun</h4>
-            <p class="bt-hint">Masukkan kode pemulihan yang kamu simpan waktu membuat akun.</p>
-            <label class="bt-f"><span>Kode</span><input name="code" required autocomplete="off" spellcheck="false" placeholder="rc-…" /></label>
-            <button type="submit">Masuk</button>
-          </form>
-        </div>`
+          <section class="bt-card">
+            <h4>Masuk cepat</h4>
+            <p class="bt-hint">Pakai akun Google, tanpa password.</p>
+            <div class="g-btn" data-g="login"></div>
+          </section>
+        </div>
+        <details class="acct-more">
+          <summary>Akun tamu dan kode pemulihan</summary>
+          <div class="acct-cols">
+            <form class="bt-card" data-f="guest">
+              <h4>Akun tamu</h4>
+              <p class="bt-hint">Cukup nickname. Kamu dapat kode pemulihan untuk masuk dari perangkat lain; email dan password bisa ditambah nanti.</p>
+              <label class="bt-f"><span>Nickname</span><input name="nickname" required minlength="3" maxlength="20" pattern="[A-Za-z0-9_]+" autocomplete="nickname" placeholder="huruf, angka, _" /></label>
+              <button type="submit">Buat akun tamu</button>
+            </form>
+            <form class="bt-card" data-f="recover">
+              <h4>Kode pemulihan</h4>
+              <p class="bt-hint">Masukkan kode yang kamu simpan waktu membuat akun tamu.</p>
+              <label class="bt-f"><span>Kode</span><input name="code" required autocomplete="off" spellcheck="false" placeholder="rc-…" /></label>
+              <button type="submit">Masuk</button>
+            </form>
+          </div>
+        </details>`
     const code = this.recoveryShown
     return `
       <div class="acct-cols">
@@ -266,9 +284,26 @@ export class AccountUI {
               : '<p class="bt-hint">Tautkan akun Google supaya bisa masuk dari perangkat lain tanpa kode pemulihan.</p><div class="g-btn" data-g="link"></div>'
           }
         </section>
+        ${
+          this.user.login
+            ? `<form class="bt-card" data-f="password">
+                <h4>Email &amp; password</h4>
+                <p class="bt-hint">Masuk pakai <b>${esc(this.user.login.email)}</b>. Ganti password: perangkat lain otomatis keluar.</p>
+                <label class="bt-f"><span>Password lama</span><input name="current" type="password" required autocomplete="current-password" /></label>
+                <label class="bt-f"><span>Password baru</span><input name="password" type="password" required minlength="8" maxlength="200" autocomplete="new-password" /></label>
+                <button type="submit">Ganti password</button>
+              </form>`
+            : `<form class="bt-card" data-f="password">
+                <h4>Email &amp; password</h4>
+                <p class="bt-hint">Tambahkan supaya bisa masuk dari perangkat mana saja tanpa kode pemulihan.</p>
+                <label class="bt-f"><span>Email</span><input name="email" type="email" required autocomplete="email" spellcheck="false" autocapitalize="off" /></label>
+                <label class="bt-f"><span>Password</span><input name="password" type="password" required minlength="8" maxlength="200" autocomplete="new-password" placeholder="minimal 8 karakter" /></label>
+                <button type="submit" class="primary">Simpan</button>
+              </form>`
+        }
         <section class="bt-card">
           <h4>Keluar</h4>
-          <p class="bt-hint">Pastikan kode pemulihan sudah disimpan sebelum keluar.</p>
+          <p class="bt-hint">${this.user.login || this.user.google ? 'Masuk lagi kapan saja pakai email atau Google.' : 'Pastikan kode pemulihan sudah disimpan sebelum keluar.'}</p>
           <button type="button" data-a="logout">Keluar</button>
         </section>
       </div>`
@@ -365,6 +400,22 @@ export class AccountUI {
       if (f.dataset.f === 'gnick' && this.gPending) {
         await api.google(this.gPending.credential, (f.elements.namedItem('nickname') as HTMLInputElement).value.trim())
         return await this.signedIn('Akun dibuat. Selamat datang di arena.')
+      }
+      const val = (n: string) => (f.elements.namedItem(n) as HTMLInputElement).value
+      if (f.dataset.f === 'login' || f.dataset.f === 'register') {
+        const r =
+          f.dataset.f === 'login'
+            ? await api.login(val('login').trim(), val('password'))
+            : await api.register({ nickname: val('nickname').trim(), email: val('email').trim(), password: val('password') })
+        await this.signedIn(f.dataset.f === 'login' ? `Masuk sebagai ${r.user.nickname}.` : 'Akun dibuat. Selamat datang di arena.')
+        return this.o.dialog.close()
+      }
+      if (f.dataset.f === 'password') {
+        const changing = !!this.user?.login
+        await api.setPassword(changing ? { current: val('current'), password: val('password') } : { email: val('email').trim(), password: val('password') })
+        this.user = (await api.me()).user
+        toast(changing ? 'Password diganti. Perangkat lain sudah keluar.' : 'Email dan password tersimpan.', 'good')
+        return await this.render()
       }
       if (f.dataset.f === 'guest') {
         const r = await api.guest((f.elements.namedItem('nickname') as HTMLInputElement).value)
