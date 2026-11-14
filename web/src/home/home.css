@@ -190,6 +190,12 @@ body.no-gl .mask-fallback { display: block; }
 .card input:focus, .join input:focus { border-color: var(--sapphire); box-shadow: 0 0 0 3px rgba(64, 95, 250, 0.25); }
 .code { display: block; padding: 12px; border-radius: 12px; background: rgba(7, 6, 15, 0.7); border: 1px dashed var(--lav); font: 500 14px ui-monospace, monospace; word-break: break-all; user-select: all; }
 .err { color: var(--down); font-size: 13px; }
+/* sign in with Google: Google draws the button itself (an iframe), we only centre it */
+.g-login, .g-link { display: flex; flex-direction: column; gap: 14px; }
+.g-btn { display: flex; justify-content: center; min-height: 44px; }
+.or { display: flex; align-items: center; gap: 10px; font-size: 12px !important; letter-spacing: 0.08em; text-transform: uppercase; }
+.or::before, .or::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+.card p.ok { color: var(--up); }
 .skip { font-size: 13px; color: var(--muted); text-align: center; }
 .skip:hover { color: var(--text); }
 

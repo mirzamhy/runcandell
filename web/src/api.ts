@@ -35,7 +35,12 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
 export interface User {
   id: number
   nickname: string
+  /** set when the account signs in with Google (only on /me) */
+  google?: { email: string | null } | null
 }
+
+/** answer of POST /auth/google: signed in / linked, or a new account that still needs a nickname */
+export type GoogleResult = { user: User; linked?: boolean } | { needNickname: true; suggestion: string }
 
 export interface ReplayItem {
   id: number
@@ -96,6 +101,8 @@ export const api = {
   recover: (code: string) => call<{ user: User }>('POST', '/auth/recover', { code }),
   logout: () => call<{ ok: true }>('POST', '/auth/logout'),
   newRecovery: () => call<{ recoveryCode: string }>('POST', '/me/recovery'),
+  authConfig: () => call<{ googleClientId: string | null }>('GET', '/auth/config'),
+  google: (credential: string, nickname?: string) => call<GoogleResult>('POST', '/auth/google', { credential, nickname }),
 
   replays: () => call<{ items: ReplayItem[] }>('GET', '/replays'),
   replay: (id: number) => call<{ id: number; name: string; session: unknown }>('GET', `/replays/${id}`),

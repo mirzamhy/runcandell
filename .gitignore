@@ -21,3 +21,8 @@ Thumbs.db
 
 # local tool config
 .claude/
+
+# secrets (Google client id, etc.)
+.env
+.env.*
+!.env.example

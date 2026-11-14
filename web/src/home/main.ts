@@ -2,6 +2,7 @@
 import { ApiError, api, duelApi, statsApi, type DuelListItem, type Stats, type User } from '../api'
 import type { Arena3D } from './arena3d'
 import { mountLogos } from '../shared/brand'
+import { mountGoogleButton } from '../shared/google'
 import { EYES_SIGIL, maskEyesSvg, maskSvg } from './mask'
 import '../shared/theme.css'
 import '../shared/shell.css'
@@ -131,17 +132,54 @@ function enterLanding() {
 
 const guestForm = $<HTMLFormElement>('guest-form')
 const recoverForm = $<HTMLFormElement>('recover-form')
+const gnickForm = $<HTMLFormElement>('gnick-form')
 const codeBox = $('code-box')
 const loginErr = $('login-err')
+const gLogin = $('g-login')
+let googleOn = false
 
-function loginPane(p: 'guest' | 'recover' | 'code') {
+function loginPane(p: 'guest' | 'recover' | 'code' | 'gnick') {
   guestForm.hidden = p !== 'guest'
   recoverForm.hidden = p !== 'recover'
+  gnickForm.hidden = p !== 'gnick'
   codeBox.hidden = p !== 'code'
+  gLogin.hidden = !googleOn || (p !== 'guest' && p !== 'recover')
   loginErr.hidden = true
-  ;(p === 'guest' ? guestForm : recoverForm).querySelector('input')?.focus()
+  ;({ guest: guestForm, recover: recoverForm, gnick: gnickForm, code: null })[p]?.querySelector('input')?.focus()
 }
 for (const b of document.querySelectorAll<HTMLButtonElement>('[data-to]')) b.addEventListener('click', () => loginPane(b.dataset.to as 'guest' | 'recover'))
+
+const showErr = (e: unknown) => {
+  loginErr.textContent = e instanceof ApiError ? e.message : 'Gagal. Coba lagi.'
+  loginErr.hidden = false
+}
+
+// Google: known account -> straight in; new account -> pick a nickname first
+let gCredential = ''
+async function onGoogle(credential: string) {
+  loginErr.hidden = true
+  try {
+    const r = await api.google(credential)
+    if ('needNickname' in r) {
+      gCredential = credential
+      ;(gnickForm.elements.namedItem('nickname') as HTMLInputElement).value = r.suggestion
+      loginPane('gnick')
+    } else void enter(r.user)
+  } catch (e) {
+    showErr(e)
+  }
+}
+gnickForm.addEventListener('submit', (e) => {
+  e.preventDefault()
+  void submit(gnickForm, async () => {
+    const r = await api.google(gCredential, (gnickForm.elements.namedItem('nickname') as HTMLInputElement).value.trim())
+    if ('user' in r) void enter(r.user)
+  })
+})
+void mountGoogleButton($('g-btn'), (c) => void onGoogle(c)).then((ok) => {
+  googleOn = ok
+  if (ok && (!guestForm.hidden || !recoverForm.hidden)) gLogin.hidden = false
+})
 
 async function submit(form: HTMLFormElement, run: () => Promise<void>) {
   const btn = form.querySelector<HTMLButtonElement>('button[type=submit]')!
@@ -150,8 +188,7 @@ async function submit(form: HTMLFormElement, run: () => Promise<void>) {
   try {
     await run()
   } catch (e) {
-    loginErr.textContent = e instanceof ApiError ? e.message : 'Gagal. Coba lagi.'
-    loginErr.hidden = false
+    showErr(e)
   } finally {
     btn.disabled = false
   }
@@ -165,6 +202,16 @@ guestForm.addEventListener('submit', (e) => {
     pending = r.user
     $('code-value').textContent = r.recoveryCode
     loginPane('code')
+    // the guest is signed in now: a Google account can be linked instead of keeping the code
+    const box = $('g-link-box')
+    void mountGoogleButton($('g-link'), (credential) => {
+      void api.google(credential).then(
+        () => {
+          box.innerHTML = '<p class="ok">Google tertaut. Kode di atas tetap bisa dipakai sebagai cadangan.</p>'
+        },
+        showErr,
+      )
+    }).then((ok) => (box.hidden = !ok))
   })
 })
 recoverForm.addEventListener('submit', (e) => {

@@ -13,6 +13,7 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { createHash, randomBytes } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import { mountDuels } from './duel.ts'
+import { googleJwks, suggestNickname, verifyGoogleToken, type JwksSource } from './google.ts'
 import { HttpError, idParam, int, json, obj, str } from './http.ts'
 import { singleMarket, type MarketData, type MarketSource } from './market.ts'
 
@@ -30,6 +31,8 @@ export interface AppOptions {
   /** candle data for duels; without it duel routes answer 503 */
   /** one data set (tests: treated as gold) or every instrument */
   market?: MarketData | MarketSource
+  /** "Sign in with Google": OAuth client ID (env RC_GOOGLE_CLIENT_ID); `jwks` only for tests */
+  google?: { clientId: string; jwks?: JwksSource }
 }
 
 const COOKIE = 'rc_session'
@@ -75,20 +78,81 @@ export function createApp(db: DatabaseSync, opt: AppOptions) {
     setCookie(c, COOKIE, t, { httpOnly: true, sameSite: 'Lax', secure: opt.secureCookie, path: '/', maxAge: SESSION_DAYS * 86400 })
   }
 
-  app.post('/api/auth/guest', limitJson, async (c) => {
-    const body = await json(c)
-    const nickname = str(body.nickname, 'Nickname', 20, 3)
+  const nickTaken = (n: string) => !!db.prepare('SELECT 1 FROM users WHERE nickname = ?').get(n)
+  const checkNick = (v: unknown) => {
+    const nickname = str(v, 'Nickname', 20, 3)
     if (!NICK.test(nickname)) throw new HttpError(400, 'Nickname cuma boleh huruf, angka, dan _ (3–20).')
+    if (nickTaken(nickname)) throw new HttpError(409, 'Nickname sudah dipakai.')
+    return nickname
+  }
+  /** new accounts per IP per hour; returns the commit step, run once the account exists */
+  const signupSlot = (c: Context) => {
     const ip = c.req.header('x-forwarded-for')?.split(',')[0].trim() ?? 'local'
     const recent = (signups.get(ip) ?? []).filter((t) => t > now() - 3600)
     if (recent.length >= (opt.signupLimit ?? 10)) throw new HttpError(429, 'Terlalu banyak akun baru. Coba lagi nanti.')
-    if (db.prepare('SELECT 1 FROM users WHERE nickname = ?').get(nickname)) throw new HttpError(409, 'Nickname sudah dipakai.')
+    return () => signups.set(ip, [...recent, now()])
+  }
+  /** the signed-in user, if any (for routes that also work signed out) */
+  const sessionUser = (c: Context): User | undefined => {
+    const t = getCookie(c, COOKIE)
+    if (!t) return undefined
+    const row = db
+      .prepare('SELECT u.id, u.nickname, s.last_seen FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?')
+      .get(sha(t)) as (User & { last_seen: number }) | undefined
+    return row && row.last_seen >= now() - SESSION_DAYS * 86400 ? { id: row.id, nickname: row.nickname } : undefined
+  }
+
+  app.post('/api/auth/guest', limitJson, async (c) => {
+    const body = await json(c)
+    const nickname = checkNick(body.nickname)
+    const done = signupSlot(c)
     const code = `rc-${token(18)}`
     const r = db.prepare('INSERT INTO users (nickname, recovery_hash, created_at) VALUES (?, ?, ?)').run(nickname, sha(code), now())
-    signups.set(ip, [...recent, now()])
+    done()
     const id = Number(r.lastInsertRowid)
     startSession(c, id)
     return c.json({ user: { id, nickname }, recoveryCode: code }, 201)
+  })
+
+  // ---------- Google ----------
+
+  const jwks = opt.google ? (opt.google.jwks ?? googleJwks()) : null
+  app.get('/api/auth/config', (c) => c.json({ googleClientId: opt.google?.clientId ?? null }))
+
+  /**
+   * One route for every case, decided by the Google account and the current session:
+   * known Google account -> sign in; signed in without Google -> link it to this account;
+   * otherwise a new account, which needs a nickname (answered with `needNickname` first).
+   */
+  app.post('/api/auth/google', limitJson, async (c) => {
+    if (!opt.google || !jwks) throw new HttpError(503, 'Login Google belum diaktifkan di server.')
+    const body = await json(c)
+    const g = await verifyGoogleToken(str(body.credential, 'Credential', 4096, 20), opt.google.clientId, jwks, now())
+    const known = db.prepare('SELECT id, nickname FROM users WHERE google_sub = ?').get(g.sub) as User | undefined
+    const me = sessionUser(c)
+    if (known) {
+      if (me && me.id !== known.id) throw new HttpError(409, `Akun Google ini sudah dipakai akun ${known.nickname}. Keluar dulu lalu masuk dengan Google.`)
+      if (!me) startSession(c, known.id)
+      db.prepare('UPDATE users SET email = ? WHERE id = ?').run(g.email, known.id)
+      return c.json({ user: known })
+    }
+    if (me) {
+      const linked = db.prepare('SELECT google_sub FROM users WHERE id = ?').get(me.id) as { google_sub: string | null }
+      if (linked.google_sub) throw new HttpError(409, 'Akun ini sudah terhubung ke akun Google lain.')
+      db.prepare('UPDATE users SET google_sub = ?, email = ? WHERE id = ?').run(g.sub, g.email, me.id)
+      return c.json({ user: me, linked: true })
+    }
+    if (body.nickname === undefined) return c.json({ needNickname: true, suggestion: suggestNickname(nickTaken) })
+    const nickname = checkNick(body.nickname)
+    const done = signupSlot(c)
+    // Google accounts sign in with Google; the recovery code stays unknown until they ask for one
+    const r = db
+      .prepare('INSERT INTO users (nickname, recovery_hash, google_sub, email, created_at) VALUES (?, ?, ?, ?, ?)')
+      .run(nickname, sha(token(32)), g.sub, g.email, now())
+    done()
+    const id = Number(r.lastInsertRowid)
+    startSession(c, id)
+    return c.json({ user: { id, nickname } }, 201)
   })
 
   app.post('/api/auth/recover', limitJson, async (c) => {
@@ -123,7 +187,11 @@ export function createApp(db: DatabaseSync, opt: AppOptions) {
     await next()
   })
 
-  app.get('/api/me', (c) => c.json({ user: c.get('user') }))
+  app.get('/api/me', (c) => {
+    const u = c.get('user')
+    const g = db.prepare('SELECT email, google_sub FROM users WHERE id = ?').get(u.id) as { email: string | null; google_sub: string | null }
+    return c.json({ user: { ...u, google: g.google_sub ? { email: g.email } : null } })
+  })
 
   /** New recovery code; the old one stops working. */
   app.post('/api/me/recovery', (c) => {

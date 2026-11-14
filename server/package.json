@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "node --watch --disable-warning=ExperimentalWarning src/index.ts",
-    "start": "node --disable-warning=ExperimentalWarning src/index.ts",
+    "dev": "node --watch --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/index.ts",
+    "start": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning src/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "node --disable-warning=ExperimentalWarning --test src/app.test.ts src/duel.test.ts"
+    "test": "node --disable-warning=ExperimentalWarning --test src/app.test.ts src/duel.test.ts src/google.test.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.8",

@@ -42,6 +42,18 @@
         </div>
 
         <section class="card" id="daftar">
+          <div class="g-login" id="g-login" hidden>
+            <div class="g-btn" id="g-btn"></div>
+            <p class="or"><span>atau pakai nickname</span></p>
+          </div>
+          <form id="gnick-form" class="stack" hidden>
+            <h2>Satu langkah lagi</h2>
+            <p>Pilih nickname untuk arena. Nama asli dan email Google tidak ditampilkan ke pemain lain.</p>
+            <label>Nickname<input name="nickname" autocomplete="nickname" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]{3,20}" required /></label>
+            <small class="hint">3–20 karakter: huruf, angka, _</small>
+            <button class="btn primary" type="submit">Masuk arena</button>
+            <button class="btn ghost" type="button" data-to="guest">Batal</button>
+          </form>
           <form id="guest-form" class="stack">
             <h2>Buat akun</h2>
             <p>Gratis. Cukup nickname, tanpa email dan password.</p>
@@ -62,6 +74,11 @@
             <p>Ini satu-satunya cara masuk lagi dari perangkat lain. Kode cuma tampil sekali.</p>
             <code class="code" id="code-value"></code>
             <button class="btn ghost" type="button" id="code-copy">Salin kode</button>
+            <div class="g-link" id="g-link-box" hidden>
+              <p class="or"><span>atau tanpa kode</span></p>
+              <p>Tautkan akun Google: dari perangkat lain cukup masuk dengan Google.</p>
+              <div class="g-btn" id="g-link"></div>
+            </div>
             <button class="btn primary" type="button" id="code-done">Sudah saya simpan, masuk</button>
           </div>
           <p class="err" id="login-err" role="alert" hidden></p>

@@ -58,7 +58,7 @@ Data: XAUUSD M1 dari MetaTrader 5 (gratis), mulai 1 tahun (akun Exness standar, 
 - Optimasi parameter sederhana (grid kecil) + peringatan overfitting.
 - Bandingkan 2 hasil backtest berdampingan.
 
-### F5 — Akun & jurnal (selesai, kecuali magic link)
+### F5 — Akun & jurnal (selesai; login Google ada, magic link email belum)
 - Login nickname + kode pemulihan. Magic link email belum (butuh layanan kirim email).
 - Simpan sesi replay, hasil backtest, strategi.
 - Jurnal trade: alasan entry, screenshot chart otomatis, tag setup, emosi.
@@ -116,6 +116,30 @@ Dua user dapat potongan chart yang sama, analisa dalam batas waktu, pasang satu 
 - Materi belajar singkat: candlestick, support/resistance, sesi pasar emas, manajemen risiko, tiap materi ada latihan replay.
 - Share hasil (gambar equity curve + statistik).
 
+### F9 — Candle realtime (saat deploy)
+Tujuan: chart di web ikut bergerak seperti di MT5, untuk semua pair. Data historis tetap Parquet; realtime hanya menambal ujungnya.
+
+**Sumber: MT5 yang sama dengan data historis** (Exness). Harga, spread, dan jam candle konsisten dengan 5 tahun data yang sudah ada. API pihak ketiga (Twelve Data, Polygon, dll.) tidak dipakai: harga dan spread beda dari broker, candle realtime tidak akan nyambung dengan histori.
+
+```
+[Windows VPS: MT5 + live_feed.py] --HTTPS POST tiap 1 dtk--> [server Hono] --SSE--> [browser]
+                                                          \-> SQLite live_m1 (tambalan sejak build terakhir)
+[cron harian: export_mt5 --start <bulan ini> + build_data] --> Parquet baru, live_m1 lama dipangkas
+```
+
+- **Feeder** `tools/live_feed.py` jalan di sebelah MT5 (package `MetaTrader5` hanya untuk Windows; di Linux lihat poin Linux di bawah). Tiap ±1 dtk per pair: `symbol_info_tick` (bid/ask) + `copy_rates_from_pos(M1, 0, 2)` (candle terbentuk + candle yang baru tutup). Kirim batch ke `POST /api/feed` dengan token rahasia (`Authorization: Bearer`, env `RC_FEED_TOKEN`). Setelah restart: kirim ulang M1 sejak waktu terakhir yang diterima server (`GET /api/feed/last`), jadi tidak ada lubang.
+- **Server**: simpan M1 yang sudah tutup di tabel `live_m1(symbol, time, o, h, l, c, v, spread)`; candle terbentuk + tick terakhir di memori. Endpoint:
+  - `GET /api/live/:sym/bars?since=` — M1 setelah ujung Parquet (`manifest.to`).
+  - `GET /api/live/:sym/stream` — SSE (`streamSSE` Hono): `tick` (bid/ask) dan `bar` (M1 terbentuk/tutup), maks ±2×/dtk. SSE dipilih karena satu arah, lolos reverse proxy biasa, reconnect otomatis.
+- **Browser**: setelah chunk Parquet terakhir dimuat, ambil tambalan `bars?since=`, rakit ke TF aktif (pakai `aggregate` yang sama dengan duel), lalu subscribe stream dan `candles.update` ekor saja (jalur inkremental replay sudah ada, indikator ikut). Garis Bid/Ask, legend, dan judul tab ikut harga live. Tanda "LIVE" + status koneksi (hijau / abu saat pasar tutup / merah saat putus).
+- **Malam hari** (cron di VPS, mis. 00:10 UTC): export bulan berjalan + build, server baca manifest baru, `live_m1` sebelum `manifest.to` dihapus.
+- **Duel tidak berubah**: titik potong tetap diambil dari data historis, minimal 2 hari sebelum ujung data, jadi pasar live tidak bisa dipakai menebak hasil ronde.
+- **Linux**: MT5 bisa jalan di Wine (ada image Docker komunitas, MT5 + VNC). Feeder lalu salah satu dari: (a) Python Windows di dalam Wine yang sama, atau jembatan `mt5linux` (Python Linux memanggil package `MetaTrader5` di Wine lewat RPyC); (b) Expert Advisor MQL5 di MT5 yang mengirim `WebRequest` ke `/api/feed` (tanpa Python, URL server wajib di-whitelist di MT5). Pilihan (b) paling sedikit bagian bergerak. Butuh ±2 GB RAM. Kekurangan Wine: update MT5 kadang merusak, perlu cek otomatis "data terakhir > 2 menit = alarm".
+- **Biaya**: Linux VPS 2 GB (±$5–12/bulan, server web + MT5 Wine satu mesin), atau Windows VPS ±$10–20/bulan (paling stabil untuk MT5), atau PC sendiri yang menyala 24 jam selama masa uji.
+- **Cek dulu sebelum publik**: syarat broker soal menampilkan ulang data harga mereka di website umum.
+
+Opsi lanjutan: paper trading di harga live (forward test, akun terpisah dari replay); alert harga.
+
 ## Model data server (draft)
 
 ```
@@ -147,4 +171,4 @@ Engine eksekusi order (F3) ditulis sekali di TypeScript dan dipakai di client, W
 - Duel: berapa ronde default, berapa detik analisa, berapa jam jendela run?
 - Duel: entry cuma market, atau limit/stop juga boleh?
 - Duel: ada manajemen posisi saat run (geser SL, close manual) atau murni set-and-forget?
-- Hosting: VPS yang sudah ada atau baru?
+- Hosting: VPS yang sudah ada atau baru? Untuk F9: Linux + MT5 di Wine, Windows VPS, atau feeder di PC sendiri dan server di VPS Linux.

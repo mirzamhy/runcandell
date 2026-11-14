@@ -121,6 +121,12 @@ const MIGRATIONS = [
   ALTER TABLE duel_rounds ADD COLUMN symbol TEXT NOT NULL DEFAULT 'XAUUSD';
   ALTER TABLE duels ADD COLUMN pair TEXT NOT NULL DEFAULT 'XAUUSD';
   `,
+  // sign in with Google: the account id Google gives (sub) and the verified email
+  `
+  ALTER TABLE users ADD COLUMN google_sub TEXT;
+  ALTER TABLE users ADD COLUMN email TEXT;
+  CREATE UNIQUE INDEX users_google ON users(google_sub);
+  `,
 ]
 
 export function openDb(path: string): DatabaseSync {

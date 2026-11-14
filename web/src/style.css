@@ -1382,6 +1382,10 @@ section.bt td.sell {
   gap: 8px;
   align-content: start;
 }
+/* Google draws its button (an iframe); keep the space so the card does not jump */
+.acct-cols .g-btn {
+  min-height: 44px;
+}
 .acct-code code {
   display: block;
   margin: 8px 0;

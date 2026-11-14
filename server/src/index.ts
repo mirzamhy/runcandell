@@ -9,7 +9,12 @@ const dbPath = resolve(process.env.RC_DB ?? resolve(import.meta.dirname, '../../
 mkdirSync(dirname(dbPath), { recursive: true })
 const db = openDb(dbPath)
 const dataDir = resolve(process.env.RC_DATA ?? resolve(import.meta.dirname, '../../data/build'))
-const app = createApp(db, { secureCookie: process.env.NODE_ENV === 'production', market: new ParquetMarkets(dataDir) })
+const googleClientId = process.env.RC_GOOGLE_CLIENT_ID?.trim()
+const app = createApp(db, {
+  secureCookie: process.env.NODE_ENV === 'production',
+  market: new ParquetMarkets(dataDir),
+  google: googleClientId ? { clientId: googleClientId } : undefined,
+})
 const port = Number(process.env.PORT ?? 5201)
 
 serve({ fetch: app.fetch, port, hostname: process.env.HOST ?? '127.0.0.1' }, () => {

@@ -3,6 +3,7 @@ import { ApiError, api, type BacktestItem, type JournalEntry, type JournalTrade,
 import { formatWall, makeShifter } from './time'
 import { toast } from './trade'
 import { ask } from './shared/ask'
+import { mountGoogleButton } from './shared/google'
 import { px } from './current'
 
 type Tab = 'journal' | 'replays' | 'backtests' | 'account'
@@ -74,6 +75,8 @@ export class AccountUI {
   private journalKeys = new Set<string>()
   private filter = ''
   private recoveryShown: string | null = null
+  /** a new Google user still choosing a nickname */
+  private gPending: { credential: string; suggestion: string } | null = null
   private loginWaiters: ((ok: boolean) => void)[] = []
   private readonly body: HTMLElement
 
@@ -156,7 +159,10 @@ export class AccountUI {
       .join('')
     this.body.innerHTML = '<p class="bt-empty">Memuat…</p>'
     try {
-      if (this.tab === 'account') this.body.innerHTML = this.accountHtml()
+      if (this.tab === 'account') {
+        this.body.innerHTML = this.accountHtml()
+        this.mountGoogle()
+      }
       else if (this.tab === 'journal') {
         await this.loadJournal()
         this.body.innerHTML = this.journalHtml()
@@ -173,10 +179,60 @@ export class AccountUI {
     return formatWall(shift(t), time)
   }
 
+  /** Google buttons in the account tab; their cards go away when Google login is off. */
+  private mountGoogle() {
+    for (const el of this.body.querySelectorAll<HTMLElement>('[data-g]')) {
+      const card = el.closest<HTMLElement>('.bt-card')!
+      void mountGoogleButton(el, (c) => void this.onGoogle(c)).then((ok) => {
+        if (!ok) card.remove()
+      })
+    }
+  }
+
+  private async onGoogle(credential: string) {
+    try {
+      const r = await api.google(credential)
+      if ('needNickname' in r) {
+        this.gPending = { credential, suggestion: r.suggestion }
+        return this.render()
+      }
+      await this.signedIn(r.linked ? 'Akun Google tertaut.' : `Masuk sebagai ${r.user.nickname}.`)
+    } catch (err) {
+      toast((err as Error).message, 'bad')
+    }
+  }
+
+  /** after any sign-in: fresh user (with its Google link), journal, header button */
+  private async signedIn(message: string) {
+    this.gPending = null
+    this.user = (await api.me()).user
+    await this.loadJournal()
+    this.syncButton()
+    toast(message, 'good')
+    await this.render()
+    this.resolveLogin()
+  }
+
   private accountHtml(): string {
+    if (!this.user && this.gPending)
+      return `
+        <div class="acct-cols">
+          <form class="bt-card" data-f="gnick">
+            <h4>Satu langkah lagi</h4>
+            <p class="bt-hint">Pilih nickname untuk arena. Nama asli dan email Google tidak ditampilkan ke pemain lain.</p>
+            <label class="bt-f"><span>Nickname</span><input name="nickname" required minlength="3" maxlength="20" pattern="[A-Za-z0-9_]+" autocomplete="nickname" value="${esc(this.gPending.suggestion)}" /></label>
+            <button type="submit" class="primary">Buat akun</button>
+            <button type="button" data-a="g-cancel">Batal</button>
+          </form>
+        </div>`
     if (!this.user)
       return `
         <div class="acct-cols">
+          <section class="bt-card">
+            <h4>Masuk cepat</h4>
+            <p class="bt-hint">Pakai akun Google. Tanpa password, tanpa kode pemulihan, bisa dari perangkat mana saja.</p>
+            <div class="g-btn" data-g="login"></div>
+          </section>
           <form class="bt-card" data-f="guest">
             <h4>Akun baru</h4>
             <p class="bt-hint">Cukup nickname, tanpa email dan password. Setelah dibuat kamu dapat kode pemulihan untuk masuk dari perangkat lain.</p>
@@ -200,6 +256,14 @@ export class AccountUI {
               ? `<div class="acct-code"><p><b>Simpan kode pemulihan ini.</b> Ini satu-satunya cara masuk lagi dari perangkat lain, dan tidak akan ditampilkan lagi.</p>
                  <code>${esc(code)}</code><button type="button" data-a="copy">Salin</button></div>`
               : '<p class="bt-hint">Kode pemulihan lama hilang? Buat yang baru; kode lama langsung tidak berlaku.</p><button type="button" data-a="new-code">Buat kode pemulihan baru</button>'
+          }
+        </section>
+        <section class="bt-card">
+          <h4>Google</h4>
+          ${
+            this.user.google
+              ? `<p class="bt-hint">Terhubung${this.user.google.email ? ` ke <b>${esc(this.user.google.email)}</b>` : ''}. Dari perangkat lain cukup masuk dengan Google.</p>`
+              : '<p class="bt-hint">Tautkan akun Google supaya bisa masuk dari perangkat lain tanpa kode pemulihan.</p><div class="g-btn" data-g="link"></div>'
           }
         </section>
         <section class="bt-card">
@@ -287,6 +351,7 @@ export class AccountUI {
     this.journal = []
     this.journalKeys.clear()
     this.recoveryShown = null
+    this.gPending = null
     this.syncButton()
     this.o.onJournalChange()
   }
@@ -297,6 +362,10 @@ export class AccountUI {
     const btn = f.querySelector<HTMLButtonElement>('button[type="submit"]')!
     btn.disabled = true
     try {
+      if (f.dataset.f === 'gnick' && this.gPending) {
+        await api.google(this.gPending.credential, (f.elements.namedItem('nickname') as HTMLInputElement).value.trim())
+        return await this.signedIn('Akun dibuat. Selamat datang di arena.')
+      }
       if (f.dataset.f === 'guest') {
         const r = await api.guest((f.elements.namedItem('nickname') as HTMLInputElement).value)
         this.user = r.user
@@ -328,6 +397,10 @@ export class AccountUI {
     const id = Number(el.dataset.id)
     try {
       if (a === 'close') this.o.dialog.close()
+      if (a === 'g-cancel') {
+        this.gPending = null
+        await this.render()
+      }
       if (a === 'copy' && this.recoveryShown) {
         await navigator.clipboard.writeText(this.recoveryShown).then(
           () => toast('Kode disalin.', 'good'),
