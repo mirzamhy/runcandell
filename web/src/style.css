@@ -167,7 +167,8 @@ select.symbol {
   top: 6px;
   left: 10px;
   right: 80px; /* keep clear of the price scale */
-  z-index: 3;
+  /* above the chart's own layers: the duel buy/sell buttons live here */
+  z-index: 6;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -1851,11 +1852,9 @@ body.duel .workspace {
 
 /* BUY / SELL on the chart, top left like one-click trading */
 .duel-quick {
-  position: absolute;
-  /* under the OHLC legend */
-  top: 54px;
-  left: 10px;
-  z-index: 6;
+  /* sits in the legend stack, so it stays under the legend however many lines it wraps to */
+  pointer-events: auto;
+  margin-top: 2px;
   display: flex;
   align-items: stretch;
   gap: 0;
@@ -2939,6 +2938,19 @@ body.duel .workspace {
   #bt-btn svg {
     display: none;
   }
+  /* the mask alone is the logo here; the pair picker needs the room */
+  .topbar .brand {
+    font-size: 0;
+    gap: 0;
+  }
+}
+@media (max-width: 1200px) {
+  .goto input {
+    width: 150px;
+  }
+  #zone {
+    max-width: 96px;
+  }
 }
 
 /* back to the home page, left of the logo */
@@ -2968,7 +2980,10 @@ body.duel .workspace {
   stroke-linejoin: round;
 }
 
-/* the pair stays secret during a duel round */
-body.duel select.symbol {
+/* the pair stays secret during a duel round; replay, backtest and date jumps are off */
+body.duel select.symbol,
+body.duel .topbar .goto,
+body.duel #replay-btn,
+body.duel #bt-btn {
   display: none;
 }

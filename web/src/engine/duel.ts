@@ -205,7 +205,7 @@ export function runDecision(cut: Bar, future: Bar[], d: Decision): Outcome {
   // R from prices, not money: P&L is rounded to cents, which is coarse for small prices (EURUSD)
   const move = d.side === 'buy' ? t.exit - t.entry : t.entry - t.exit
   const risk = Math.abs(planned - (d.sl as number))
-  return { ...base, r: Math.round((move / risk) * 1000) / 1000, reason: t.reason === 'manual' ? 'time' : t.reason, entry: t.entry, exit: t.exit, exitTime: t.closeTime, sl: t.sl, tp: t.tp }
+  return { ...base, r: Math.round((move / risk) * 100) / 100 || 0, reason: t.reason === 'manual' ? 'time' : t.reason, entry: t.entry, exit: t.exit, exitTime: t.closeTime, sl: t.sl, tp: t.tp }
 }
 
 /**
