@@ -10,6 +10,7 @@
 import type { Bar } from '../data.ts'
 import { Account, TradeError, type Candle, type ClosedTrade, type Side } from '../engine/account.ts'
 import type { Signal, SignalFn, StrategySpec } from './strategy.ts'
+import { instrument } from '../instruments.ts'
 
 export interface BtTrade extends ClosedTrade {
   /** USD lost if the initial SL is hit (null without SL) */
@@ -22,6 +23,8 @@ export interface BtTrade extends ClosedTrade {
 
 export interface RunInput {
   spec: StrategySpec
+  /** instrument name, for contract size and quote currency */
+  symbol?: string
   /** strategy timeframe bars, including warm-up history before the test start */
   bars: Bar[]
   tfSec: number
@@ -54,8 +57,11 @@ const LOT_STEP = 0.01
 
 export function runBacktest(inp: RunInput): RunResult {
   const { spec, bars, m1, signal, atr } = inp
-  const contract = 100
+  const inst = instrument(inp.symbol ?? 'XAUUSD')
+  const contract = inst.contract
+  const jpy = inst.quote === 'JPY'
   const acc = new Account({
+    quoteJpy: jpy,
     balance: spec.balance,
     leverage: spec.leverage,
     contractSize: contract,
@@ -111,7 +117,7 @@ export function runBacktest(inp: RunInput): RunResult {
     }
 
     let lots = spec.sizing.value
-    const risk1 = sl === null ? null : Math.abs(entry - sl) * contract // USD per 1 lot
+    const risk1 = sl === null ? null : (Math.abs(entry - sl) * contract) / (jpy ? entry : 1) // USD per 1 lot
     if (spec.sizing.kind === 'risk') {
       if (!risk1) return skip('risiko % butuh SL')
       lots = Math.floor((acc.balance * spec.sizing.value) / 100 / risk1 / LOT_STEP + 1e-9) * LOT_STEP

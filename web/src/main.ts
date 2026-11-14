@@ -32,7 +32,7 @@ import { AccountUI } from './account'
 import { BacktestUI } from './backtest/ui'
 import { DuelUI, type DuelLine, type DuelMarker, type LineField } from './duel'
 import type { BtTrade } from './backtest/run'
-import { SeriesStore, TIMEFRAMES, dataSpan, loadManifest, type Bar, type Manifest, type TF } from './data'
+import { SeriesStore, TIMEFRAMES, dataSpan, loadManifest, loadSymbols, type Bar, type Manifest, type SymbolInfo, type TF } from './data'
 import { ChartSettingsDialog, alpha, applyLook, loadLook } from './chartsettings'
 import { openMenu, type MenuItem } from './ctxmenu'
 import { DrawingLayer, type Drawing } from './drawings'
@@ -44,16 +44,18 @@ import type { IndicatorConfig } from './indicators/registry'
 import { Replay, floorIndex, type ReplaySession } from './replay'
 import { ZONES, d1DisplayTime, formatWall, makeShifter, parseZoned, toInputValue } from './time'
 import { TradeUI, toast } from './trade'
+import { current, px, setCurrent, setDigitsOverride } from './current'
 
 // ---------- persisted settings ----------
 
+// gold keeps the original keys, so earlier drawings and replay sessions stay
+const SYM_SUFFIX = current().symbol === 'XAUUSD' ? '' : `.${current().symbol}`
 const KEY = {
-  tf: 'rc.v1.tf',
   zone: 'rc.v1.zone',
-  drawings: 'rc.v1.drawings',
+  drawings: `rc.v1.drawings${SYM_SUFFIX}`,
   indicators: 'rc.v1.indicators',
   chipsCollapsed: 'rc.v1.chipsCollapsed',
-  replay: 'rc.v1.replay',
+  replay: `rc.v1.replay${SYM_SUFFIX}`,
   speed: 'rc.v1.replaySpeed',
 }
 
@@ -110,8 +112,9 @@ const color = (name: string) => css.getPropertyValue(name).trim()
 
 let manifest: Manifest
 let store: SeriesStore
-let tf: TF = load<TF>(KEY.tf, 'M15')
-if (!TIMEFRAMES.includes(tf)) tf = 'M15'
+/** every visit (and every duel round) starts on M15 */
+const START_TF: TF = 'M15'
+let tf: TF = START_TF
 let zone = load<string>(KEY.zone, 'Asia/Jakarta')
 if (!ZONES.some((z) => z.id === zone)) zone = 'UTC'
 let shift = makeShifter(zone)
@@ -184,7 +187,7 @@ const candles = chart.addSeries(CandlestickSeries, {
   wickUpColor: color('--up'),
   wickDownColor: color('--down'),
   borderVisible: false,
-  priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
+  priceFormat: { type: 'price', precision: current().digits, minMove: 10 ** -current().digits },
   // replaced by explicit Bid/Ask lines below
   priceLineVisible: false,
   lastValueVisible: false,
@@ -225,7 +228,7 @@ function updateWatermark() {
   watermark.applyOptions({
     visible: look.watermark,
     lines: [
-      { text: duelBars ? 'DUEL' : 'XAUUSD', color: c, fontSize: 56, fontStyle: 'bold' },
+      { text: duelBars ? 'DUEL' : current().symbol, color: c, fontSize: 56, fontStyle: 'bold' },
       { text: tf, color: c, fontSize: 28 },
     ],
   })
@@ -315,6 +318,15 @@ const account = new AccountUI({
   onLoadReplay: (session) => {
     if (btOpen()) setBacktest(false)
     const s = session as ReplaySession
+    const sym = s.symbol ?? 'XAUUSD'
+    if (sym !== current().symbol) {
+      // another pair: store it as that pair's session and open the chart on it
+      setCurrent(sym)
+      save(sym === 'XAUUSD' ? 'rc.v1.replay' : `rc.v1.replay.${sym}`, s)
+      sessionStorage.setItem('rc.resumeReplay', '1')
+      location.reload()
+      return
+    }
     void startReplay(s.cursorTime, s)
   },
   onUseBacktest: (b, asCompare) => {
@@ -543,6 +555,11 @@ function syncDuelMarkers() {
 
 function setDuelUI(on: boolean) {
   document.body.classList.toggle('duel', on)
+  // normalised duel prices sit around 1000: two decimals for every pair
+  const d = on ? 2 : current().digits
+  setDigitsOverride(on ? 2 : null)
+  candles.applyOptions({ priceFormat: { type: 'price', precision: d, minMove: 10 ** -d } })
+  drawings.setDigits(d)
   duelPanelEl.hidden = !on
   if (!on) duelQuickEl.hidden = true
   for (const el of [gotoInput, gotoForm.querySelector('button')!, replayBtn, btBtn]) (el as HTMLButtonElement).disabled = on
@@ -571,6 +588,8 @@ const duel = new DuelUI(duelPanelEl, duelQuickEl, {
     duelMarks = []
     setDuelUI(true)
     chart.applyOptions({}) // re-run time formatters
+    tf = START_TF
+    syncTFButtons()
     store = duelStore(tf)
     render()
     showLatest(Math.min(currentSpan(), 160))
@@ -714,7 +733,7 @@ function render(opts: { incremental?: boolean } = {}) {
   if (duelBars) syncDuelMarkers()
 }
 
-const fmt = (n: number) => n.toFixed(2)
+const fmt = (n: number) => px(n)
 
 /** Bid/Ask lines at the newest visible bar (the replay cursor in replay mode). */
 function updateQuoteLines() {
@@ -741,7 +760,7 @@ function updateLegend(param?: MouseEventParams<Time>) {
   const wall = displayTime(b.time)
   const when = hideTime() ? '' : hideDate() ? (tf === 'D1' ? '' : formatWall(wall).slice(11)) : formatWall(wall, tf !== 'D1')
   legendEl.innerHTML = [
-    `<span><b>${manifest.symbol}</b> · ${tf}${when ? ` · ${when}` : ''}</span>`,
+    `<span><b>${duelBars ? 'DUEL' : manifest.symbol}</b> · ${tf}${when ? ` · ${when}` : ''}</span>`,
     `<span><span class="k">O</span>${fmt(b.open)}</span>`,
     `<span><span class="k">H</span>${fmt(b.high)}</span>`,
     `<span><span class="k">L</span>${fmt(b.low)}</span>`,
@@ -839,7 +858,6 @@ async function switchTF(next: TF) {
     await s.loadAround(replay ? replay.cursorTime : followLatest ? null : centerT)
     store = s
     tf = next
-    save(KEY.tf, tf)
     syncTFButtons()
     render()
     if (followLatest || centerT === null) showLatest(span)
@@ -983,7 +1001,7 @@ function randomStart(): number {
 async function startReplay(t: number, session?: ReplaySession) {
   stopPlay()
   setPicking(false)
-  const r = new Replay(manifest, { ...DEFAULT_CONFIG })
+  const r = new Replay(manifest, { ...DEFAULT_CONFIG, contractSize: current().contract, quoteJpy: current().quote === 'JPY' })
   const span = currentSpan()
   await withBusy(async () => {
     if (session) await r.resume(session)
@@ -1168,7 +1186,7 @@ function buildContextMenu() {
     const price = candles.coordinateToPrice(y)
     const pt = drawings.pointAt(x, y)
     const hit = drawings.hitAt(x, y)
-    const px = price === null ? '' : price.toFixed(2)
+    const pxs = price === null ? '' : px(price)
     const items: MenuItem[] = []
 
     if (hit) {
@@ -1192,16 +1210,16 @@ function buildContextMenu() {
       // below the market a buy waits as a limit and a sell as a stop; above it is the other way round
       const below = p < q.bid
       items.push(
-        { label: `${below ? 'Buy limit' : 'Sell limit'} di ${p.toFixed(2)}`, hint: 'isi tiket', act: () => trade.prefill('limit', p) },
-        { label: `${below ? 'Sell stop' : 'Buy stop'} di ${p.toFixed(2)}`, hint: 'isi tiket', act: () => trade.prefill('stop', p) },
+        { label: `${below ? 'Buy limit' : 'Sell limit'} di ${px(p)}`, hint: 'isi tiket', act: () => trade.prefill('limit', p) },
+        { label: `${below ? 'Sell stop' : 'Buy stop'} di ${px(p)}`, hint: 'isi tiket', act: () => trade.prefill('stop', p) },
         'sep',
       )
     }
 
     if (pt && price !== null) {
       items.push(
-        { label: `Garis horizontal di ${px}`, act: () => drawings.addAt('hline', { t: pt.t, p: price }) },
-        { label: `Salin harga ${px}`, act: () => void navigator.clipboard?.writeText(px) },
+        { label: `Garis horizontal di ${pxs}`, act: () => drawings.addAt('hline', { t: pt.t, p: price }) },
+        { label: `Salin harga ${pxs}`, act: () => void navigator.clipboard?.writeText(pxs) },
       )
     }
     if (!replay && !duelBars && !btOpen()) {
@@ -1322,12 +1340,39 @@ if (import.meta.env.DEV) {
   }
 }
 
+// ---------- instrument picker ----------
+
+function buildSymbolPicker(list: SymbolInfo[]) {
+  const el = $<HTMLSelectElement>('symbol')
+  const items = list.length ? list : [{ symbol: current().symbol, label: current().label }]
+  el.innerHTML = items.map((x) => `<option value="${x.symbol}" ${x.symbol === current().symbol ? 'selected' : ''}>${x.symbol}</option>`).join('')
+  el.title = current().label
+  el.addEventListener('change', () => {
+    if (duel.active) {
+      el.value = current().symbol
+      return
+    }
+    if (replay) saveSession(true)
+    // every pair has its own drawings, replay session and price format: start the page fresh
+    setCurrent(el.value)
+    location.reload()
+  })
+}
+
 // ---------- boot ----------
 
 async function boot() {
   showOverlay('Memuat data…')
   try {
-    manifest = await loadManifest()
+    const list = await loadSymbols().catch((): SymbolInfo[] => [])
+    if (list.length && !list.some((x) => x.symbol === current().symbol)) {
+      // remembered pair has no data any more: fall back to the first one
+      setCurrent(list[0].symbol)
+      location.reload()
+      return
+    }
+    buildSymbolPicker(list)
+    manifest = await loadManifest(current().symbol)
   } catch {
     showOverlay(
       'Data belum ada. Dari folder repo jalankan:' +
@@ -1335,7 +1380,7 @@ async function boot() {
     )
     return
   }
-  drawings.setDigits(2)
+  drawings.setDigits(current().digits)
   indicators.load(load<IndicatorConfig[]>(KEY.indicators, []))
   buildControls()
   store = new SeriesStore(manifest, tf)
@@ -1347,6 +1392,12 @@ async function boot() {
   }
   render()
   showLatest(160)
+  if (sessionStorage.getItem('rc.resumeReplay')) {
+    // a replay from the account on another pair: the page reloaded onto that pair
+    sessionStorage.removeItem('rc.resumeReplay')
+    const s = load<ReplaySession | null>(KEY.replay, null)
+    if (s) void startReplay(s.cursorTime, s)
+  }
   void account.init().then(() => {
     const q = new URLSearchParams(location.search)
     const play = q.get('play')

@@ -11,6 +11,7 @@ import {
 } from 'lightweight-charts'
 import * as C from './calc'
 import { BandFill, LinePlot, SessionShade, type LineSpec } from './primitives'
+import { pxAuto } from '../current'
 
 /** Everything an indicator needs to compute, built once per render. */
 export interface Ctx {
@@ -115,7 +116,7 @@ function syncSeries(s: ISeriesApi<SeriesType>, pts: { time: Time }[], st: SyncSt
   st.first = pts[0]?.time ?? null
 }
 
-const fmt2 = (v: number) => (Number.isFinite(v) ? v.toFixed(2) : '–')
+const fmt2 = (v: number) => (Number.isFinite(v) ? pxAuto(v) : '–')
 const fmtInt = (v: number) => (Number.isFinite(v) ? Math.round(v).toLocaleString('id-ID') : '–')
 
 /** Hex color + alpha → rgba() for fills. */

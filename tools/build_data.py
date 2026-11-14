@@ -1,19 +1,20 @@
 """Validate raw M1 Parquet files and build the timeframe pyramid for the web app.
 
-Input:  data/raw/XAUUSD_M1_YYYY-MM.parquet, data/raw/symbol.json
+Input:  data/raw/<NAME>/M1_YYYY-MM.parquet, data/raw/<NAME>/symbol.json
 Output: data/build/
-          M1/YYYY-MM.parquet                 one file per month
-          M5|M15|M30|H1/YYYY.parquet         one file per year
-          H4|D1/all.parquet                  single file
-          manifest.json                      file list + ranges + schema
+          symbols.json                       instruments with data: name, label, digits, range
+          <NAME>/M1/YYYY-MM.parquet          one file per month
+          <NAME>/M5|M15|M30|H1/YYYY.parquet  one file per year
+          <NAME>/H4|D1/all.parquet           single file
+          <NAME>/manifest.json               file list + ranges + schema
 
 Higher timeframes are aggregated from M1 on UTC boundaries (H4 at 00/04/08.. UTC).
-D1 uses the gold trading day: 17:00 New York to 17:00 New York (DST aware).
+D1 uses the broker trading day 17:00 New York to 17:00 New York (DST aware); crypto uses 00:00 UTC.
 The browser loads only the files it needs: zoomed-out charts use H4/D1 without touching M1.
 Replay/duel must NOT use these prebuilt higher-TF files for the forming candle at the cut;
 they rebuild it from M1 up to the cut so future high/low never leaks.
 
-Usage: python tools/build_data.py [--strict]
+Usage: python tools/build_data.py [--strict] [--only NAME,NAME]
   --strict  exit with code 1 if validation finds errors
 """
 import argparse
@@ -25,6 +26,7 @@ from pathlib import Path
 import pandas as pd
 
 from candles_io import SCHEMA, read_candles, write_candles
+from symbols import SYMBOLS
 
 ROOT = Path(__file__).resolve().parents[1]
 RAW = ROOT / "data" / "raw"
@@ -52,7 +54,7 @@ def is_expected_gap(t0, t1):
     return False
 
 
-def validate(df, tag):
+def validate(df, tag, always_open=False):
     issues, errors = [], 0
     dup = int(df["time"].duplicated().sum())
     if dup:
@@ -80,7 +82,7 @@ def validate(df, tag):
     unexpected = [
         (int(t[i]), int(t[i + 1]))
         for i in gaps[gaps > 300].index
-        if not is_expected_gap(int(t[i]), int(t[i + 1]))
+        if always_open or not is_expected_gap(int(t[i]), int(t[i + 1]))
     ]
     if unexpected:
         issues.append(f"warn: {len(unexpected)} unexpected gaps > 5 min")
@@ -90,7 +92,7 @@ def validate(df, tag):
     zero_vol = int((df["tick_volume"] == 0).sum())
     if zero_vol:
         issues.append(f"warn: {zero_vol} bars with tick_volume 0")
-    spikes = int((df["close"].astype("int64").pct_change().abs() > 0.01).sum())
+    spikes = int((df["close"].astype("int64").pct_change().abs() > (0.03 if always_open else 0.01)).sum())
     if spikes:
         issues.append(f"warn: {spikes} bars with |close change| > 1%")
 
@@ -108,9 +110,9 @@ def trading_day_bucket(times):
     return (start.dt.tz_convert("UTC").astype("int64") // 10**9).to_numpy()
 
 
-def resample(m1, seconds):
+def resample(m1, seconds, d1="ny17"):
     df = m1.copy()
-    if seconds == 86400:
+    if seconds == 86400 and d1 == "ny17":
         df["bucket"] = trading_day_bucket(df["time"])
     else:
         df["bucket"] = (df["time"].astype("int64") // seconds) * seconds
@@ -127,9 +129,9 @@ def resample(m1, seconds):
     return out.reset_index(drop=True)
 
 
-def entry(path, df):
+def entry(path, df, base):
     return {
-        "file": path.relative_to(BUILD).as_posix(),
+        "file": path.relative_to(base).as_posix(),
         "bars": int(len(df)),
         "from": int(df["time"].iloc[0]),
         "to": int(df["time"].iloc[-1]),
@@ -137,72 +139,106 @@ def entry(path, df):
     }
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--strict", action="store_true")
-    args = ap.parse_args()
-
-    meta = json.loads((RAW / "symbol.json").read_text())
-    files = sorted(RAW.glob("XAUUSD_M1_*.parquet"))
+def build_one(name, strict):
+    raw = RAW / name
+    out_dir = BUILD / name
+    meta = json.loads((raw / "symbol.json").read_text())
+    files = sorted(raw.glob("M1_*.parquet"))
     if not files:
-        raise SystemExit("no raw Parquet files, run tools/export_mt5.py first")
+        print(f"{name}: no raw files, skipped")
+        return None, 0
+    d1 = SYMBOLS[name]["d1"]
 
-    if BUILD.exists():
-        shutil.rmtree(BUILD)
+    if out_dir.exists():
+        shutil.rmtree(out_dir)
     timeframes = {"M1": []}
     total_errors = 0
     months = []
 
-    print("validate:")
+    print(f"{name}: validate")
     for f in files:
         tag = f.stem.split("_")[-1]
         df = read_candles(f)
-        total_errors += validate(df, tag)
+        total_errors += validate(df, tag, d1 == "utc")
         df = df.drop_duplicates("time").sort_values("time").reset_index(drop=True)
-        out = BUILD / "M1" / f"{tag}.parquet"
+        out = out_dir / "M1" / f"{tag}.parquet"
         write_candles(df, out)
-        timeframes["M1"].append(entry(out, df))
+        timeframes["M1"].append(entry(out, df, out_dir))
         months.append(df)
 
     m1 = pd.concat(months, ignore_index=True)
     years = pd.to_datetime(m1["time"].astype("int64"), unit="s", utc=True).dt.year
 
-    print("pyramid:")
+    print(f"{name}: pyramid")
     for tf, (sec, group) in PYRAMID.items():
         timeframes[tf] = []
         if group == "year":
             for y in sorted(years.unique()):
-                part = resample(m1[years == y], sec)
-                out = BUILD / tf / f"{y}.parquet"
+                part = resample(m1[years == y], sec, d1)
+                out = out_dir / tf / f"{y}.parquet"
                 write_candles(part, out)
-                timeframes[tf].append(entry(out, part))
+                timeframes[tf].append(entry(out, part, out_dir))
         else:
-            part = resample(m1, sec)
-            out = BUILD / tf / "all.parquet"
+            part = resample(m1, sec, d1)
+            out = out_dir / tf / "all.parquet"
             write_candles(part, out)
-            timeframes[tf].append(entry(out, part))
+            timeframes[tf].append(entry(out, part, out_dir))
         n = sum(e["bars"] for e in timeframes[tf])
         kb = sum(e["bytes"] for e in timeframes[tf]) / 1024
-        print(f"  {tf:>3}: {n:>6} bars  {kb:7.1f} KB")
+        print(f"  {tf:>3}: {n:>7} bars  {kb:8.1f} KB")
 
     manifest = {
-        "symbol": "XAUUSD",
+        "symbol": name,
+        "label": SYMBOLS[name]["label"],
         "source_symbol": meta["symbol"],
         "digits": meta["digits"],
         "point": meta["point"],
         "price_encoding": "integer points: price = value * point",
         "time": "unix seconds UTC, bar open time",
-        "d1_session": "D1 bar = gold trading day from 17:00 America/New_York; its time is that start, "
-                      "so the calendar date shown to users is the next day",
+        "d1_session": "D1 bar = trading day from 17:00 America/New_York; its time is that start, "
+                      "so the calendar date shown to users is the next day"
+        if d1 == "ny17" else "D1 bar = UTC calendar day",
+        "d1": d1,
         "columns": [{"name": f.name, "type": str(f.type)} for f in SCHEMA],
         "timeframes": timeframes,
         "built_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
-    (BUILD / "manifest.json").write_text(json.dumps(manifest, indent=2))
-
+    (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
     size = sum(e["bytes"] for tf in timeframes.values() for e in tf)
-    print(f"build: {len(m1)} M1 bars, all files {size / 1e6:.2f} MB -> {BUILD}")
-    if args.strict and total_errors:
+    print(f"{name}: {len(m1)} M1 bars, files {size / 1e6:.2f} MB")
+    info = {
+        "symbol": name,
+        "label": SYMBOLS[name]["label"],
+        "digits": meta["digits"],
+        "from": int(m1["time"].iloc[0]),
+        "to": int(m1["time"].iloc[-1]),
+    }
+    return info, total_errors
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--strict", action="store_true")
+    ap.add_argument("--only", help="comma separated instrument names, default every folder in data/raw")
+    args = ap.parse_args()
+
+    names = args.only.split(",") if args.only else [n for n in SYMBOLS if (RAW / n / "symbol.json").exists()]
+    if not names:
+        raise SystemExit("no raw data, run tools/export_mt5.py first")
+    BUILD.mkdir(parents=True, exist_ok=True)
+    # instruments built earlier and not rebuilt now stay in the list
+    index_path = BUILD / "symbols.json"
+    index = {x["symbol"]: x for x in json.loads(index_path.read_text())} if index_path.exists() else {}
+    errors = 0
+    for name in names:
+        info, e = build_one(name, args.strict)
+        errors += e
+        if info:
+            index[name] = info
+    ordered = [index[n] for n in SYMBOLS if n in index]
+    index_path.write_text(json.dumps(ordered, indent=2))
+    print(f"symbols.json: {', '.join(x['symbol'] for x in ordered)}")
+    if args.strict and errors:
         raise SystemExit(1)
 
 

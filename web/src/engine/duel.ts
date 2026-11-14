@@ -202,8 +202,10 @@ export function runDecision(cut: Bar, future: Bar[], d: Decision): Outcome {
   if (!acc.history.length && !acc.positions.length) return { ...base, r: 0, reason: 'unfilled', entry: null, exit: null, exitTime: null, sl: d.sl ?? null, tp: d.tp ?? null }
   if (acc.positions.length) acc.closeAll('time')
   const t = acc.history[0]
-  const risk = Math.abs(planned - (d.sl as number)) * 100
-  return { ...base, r: Math.round((t.pnl / risk) * 1000) / 1000, reason: t.reason === 'manual' ? 'time' : t.reason, entry: t.entry, exit: t.exit, exitTime: t.closeTime, sl: t.sl, tp: t.tp }
+  // R from prices, not money: P&L is rounded to cents, which is coarse for small prices (EURUSD)
+  const move = d.side === 'buy' ? t.exit - t.entry : t.entry - t.exit
+  const risk = Math.abs(planned - (d.sl as number))
+  return { ...base, r: Math.round((move / risk) * 1000) / 1000, reason: t.reason === 'manual' ? 'time' : t.reason, entry: t.entry, exit: t.exit, exitTime: t.closeTime, sl: t.sl, tp: t.tp }
 }
 
 /**

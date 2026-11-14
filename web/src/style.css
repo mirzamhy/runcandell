@@ -59,10 +59,9 @@ input:focus-visible {
 }
 
 
-.symbol {
-  font-weight: 600;
-  padding: 0 8px;
-  border-left: 1px solid var(--border);
+select.symbol {
+  min-width: 96px;
+  font-weight: 700;
 }
 
 .tfs {
@@ -1830,6 +1829,9 @@ body.duel .workspace {
   font-size: 13px;
   color: var(--muted);
 }
+.dp-res .dp-pair b {
+  color: var(--text);
+}
 .dp-dl {
   display: grid;
   gap: 6px;
@@ -2928,9 +2930,6 @@ body.duel .workspace {
   #zone {
     max-width: 112px;
   }
-  .topbar .symbol {
-    display: none;
-  }
   .tfs button {
     padding-inline: 7px;
   }
@@ -2967,4 +2966,9 @@ body.duel .workspace {
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+/* the pair stays secret during a duel round */
+body.duel select.symbol {
+  display: none;
 }

@@ -8,12 +8,13 @@
  */
 import { Hono, type Context } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
+import { compress } from 'hono/compress'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { createHash, randomBytes } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import { mountDuels } from './duel.ts'
 import { HttpError, idParam, int, json, obj, str } from './http.ts'
-import type { MarketData } from './market.ts'
+import { singleMarket, type MarketData, type MarketSource } from './market.ts'
 
 interface User {
   id: number
@@ -27,7 +28,8 @@ export interface AppOptions {
   /** guest accounts per IP per hour */
   signupLimit?: number
   /** candle data for duels; without it duel routes answer 503 */
-  market?: MarketData
+  /** one data set (tests: treated as gold) or every instrument */
+  market?: MarketData | MarketSource
 }
 
 const COOKIE = 'rc_session'
@@ -51,6 +53,10 @@ export function createApp(db: DatabaseSync, opt: AppOptions) {
     return c.json({ error: 'Kesalahan server.' }, 500)
   })
   app.notFound((c) => c.json({ error: 'Tidak ditemukan.' }, 404))
+
+  // gzip JSON: duel snapshots are ~300 KB raw, ~70 KB compressed
+  // (the Vite dev proxy also stalls on uncompressed bodies past ~256 KB)
+  app.use('/api/*', compress({ threshold: 4096 }))
 
   // CSRF guard + default body limit (screenshots get their own)
   app.use('/api/*', async (c, next) => {
@@ -354,6 +360,7 @@ export function createApp(db: DatabaseSync, opt: AppOptions) {
     return c.body(new Uint8Array(s.data), 200, { 'Content-Type': s.mime, 'Cache-Control': 'private, max-age=86400' })
   })
 
-  mountDuels(app, db, opt.market ?? null, now)
+  const m = opt.market
+  mountDuels(app, db, !m ? null : 'of' in m ? m : singleMarket(m), now)
   return app
 }

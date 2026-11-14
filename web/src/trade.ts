@@ -10,10 +10,11 @@ import {
 } from 'lightweight-charts'
 import { openMenu, type MenuItem } from './ctxmenu'
 import { TradeError, stats, type Account, type AccountEvent, type PendingType, type Side, type ClosedTrade } from './engine/account'
+import { px, pxStep } from './current'
 
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 })
 const fmtMoney = (n: number, sign = false) => (sign && n > 0 ? '+' : '') + money.format(n)
-const fmtPx = (n: number | null) => (n === null ? '–' : n.toFixed(2))
+const fmtPx = (n: number | null) => (n === null ? '–' : px(n))
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
 
 const COLORS = { buy: '#4c8dff', sell: '#ef5350', sl: '#ef5350', tp: '#26a69a', pending: '#f5a524' }
@@ -299,7 +300,7 @@ export class TradeUI {
     this.lines.getTicket = () => this.ticketPreview()
     this.lines.setTicket = (field, v) => {
       const input = (this.el.ticket as HTMLFormElement).elements.namedItem(field) as HTMLInputElement
-      input.value = v.toFixed(2)
+      input.value = px(v)
       this.updateRisk()
       this.lines.sync()
     }
@@ -430,10 +431,10 @@ export class TradeUI {
           <label><span>Lot</span><input name="lots" type="number" min="0.01" max="100" step="0.01" value="0.10" inputmode="decimal"></label>
           <label><span>Tipe</span><select name="type"><option value="market">Market</option><option value="limit">Limit</option><option value="stop">Stop</option></select></label>
         </div>
-        <label class="price-row" hidden><span>Harga order</span><input name="price" type="number" step="0.01" inputmode="decimal"></label>
+        <label class="price-row" hidden><span>Harga order</span><input name="price" type="number" step="${pxStep()}" inputmode="decimal"></label>
         <div class="row">
-          <label><span>Stop loss</span><input name="sl" type="number" step="0.01" placeholder="opsional" inputmode="decimal"></label>
-          <label><span>Take profit</span><input name="tp" type="number" step="0.01" placeholder="opsional" inputmode="decimal"></label>
+          <label><span>Stop loss</span><input name="sl" type="number" step="${pxStep()}" placeholder="opsional" inputmode="decimal"></label>
+          <label><span>Take profit</span><input name="tp" type="number" step="${pxStep()}" placeholder="opsional" inputmode="decimal"></label>
         </div>
         <p class="risk" data-f="risk"></p>
         <div class="sides">
@@ -461,7 +462,7 @@ export class TradeUI {
       ;(r.querySelector('.price-row') as HTMLElement).hidden = !pending
       if (pending && !field('price').value) {
         const q = this.account?.quote()
-        if (q) field('price').value = q.bid.toFixed(2)
+        if (q) field('price').value = px(q.bid)
       }
       this.updateRisk()
       this.lines.sync()
@@ -495,7 +496,7 @@ export class TradeUI {
     const sel = form.elements.namedItem('type') as HTMLSelectElement
     sel.value = type
     sel.dispatchEvent(new Event('change'))
-    ;(form.elements.namedItem('price') as HTMLInputElement).value = price.toFixed(2)
+    ;(form.elements.namedItem('price') as HTMLInputElement).value = px(price)
     this.revealTicket()
     this.updateRisk()
     ;(form.elements.namedItem('sl') as HTMLInputElement).focus()

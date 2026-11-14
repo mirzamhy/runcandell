@@ -24,6 +24,8 @@ export interface ReplaySession {
   /** id of the copy saved on the server (F5), so later saves update it */
   serverId?: number | null
   name?: string
+  /** instrument; sessions saved before pairs existed are gold */
+  symbol?: string
 }
 
 /**
@@ -40,8 +42,10 @@ export class Replay {
   hideDate = false
   serverId: number | null = null
   name = ''
+  readonly symbol: string
 
   constructor(manifest: Manifest, cfg: AccountConfig = DEFAULT_CONFIG) {
+    this.symbol = manifest.symbol
     this.m1 = new SeriesStore(manifest, 'M1')
     this.account = new Account(cfg)
   }
@@ -84,6 +88,7 @@ export class Replay {
       hideDate: this.hideDate,
       serverId: this.serverId,
       name: this.name,
+      symbol: this.symbol,
     }
   }
 

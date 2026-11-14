@@ -9,6 +9,7 @@ import { EYES_SIGIL } from '../home/mask'
 import '../shared/theme.css'
 import '../shared/shell.css'
 import './duel.css'
+import { SYMBOL_LIST } from '../instruments'
 
 mountLogos()
 setFavicon()
@@ -37,8 +38,29 @@ const duelUrl = (code: string) => `/duel.html?code=${encodeURIComponent(code)}`
 
 const CHOICES = {
   rounds: { label: 'Jumlah ronde', values: [1, 3, 5, 7, 10], def: 5, fmt: (v: number) => String(v) },
-  analysisSec: { label: 'Waktu analisa per ronde', values: [30, 60, 90, 120, 180, 300], def: 90, fmt: (v: number) => (v < 60 ? `${v} dtk` : `${v / 60} mnt`) },
-  runMinutes: { label: 'Harga dijalankan ke depan', values: [30, 60, 90, 120, 240], def: 120, fmt: (v: number) => (v < 60 ? `${v} mnt` : `${v / 60} jam`) },
+}
+
+/** analysis time per round, by name */
+const SPEEDS = [
+  { sec: 60, name: 'Kilat', time: '1 menit', note: 'Scalping: baca cepat, langsung putuskan.' },
+  { sec: 180, name: 'Normal', time: '3 menit', note: 'Cukup untuk cek beberapa timeframe.' },
+  { sec: 600, name: 'Mendalam', time: '10 menit', note: 'Analisa multi-timeframe, tarik level dan gambar.' },
+]
+const speedName = (sec: number) => SPEEDS.find((x) => x.sec === sec)?.name ?? (sec < 60 ? `${sec} dtk` : `${sec / 60} mnt`)
+const runText = (min: number) => (min >= 1440 ? `${min / 1440} hari` : min >= 60 ? `${min / 60} jam` : `${min} mnt`)
+
+function speedCards() {
+  return `<fieldset class="dp-field"><legend>Mode waktu analisa</legend><div class="dp-modes dp-speeds">${SPEEDS.map(
+    (x) =>
+      `<label class="dp-mode"><input type="radio" name="analysisSec" value="${x.sec}"${x.sec === 180 ? ' checked' : ''} /><span><b>${x.name} <em>${x.time}</em></b><small>${x.note}</small></span></label>`,
+  ).join('')}</div></fieldset>`
+}
+
+function pairChips() {
+  const opts = [['random', 'Acak'], ...SYMBOL_LIST.map((x) => [x, x])]
+  return `<fieldset class="dp-field"><legend>Pair</legend><div class="dp-chips">${opts
+    .map(([v, t]) => `<label class="dp-chip"><input type="radio" name="pair" value="${v}"${v === 'random' ? ' checked' : ''} /><span>${t}</span></label>`)
+    .join('')}</div><p class="dp-note">Acak: tiap ronde pair beda, nama pair dibuka setelah kamu memutuskan. Hasil trade dihitung sampai 1 hari setelah keputusan.</p></fieldset>`
 }
 
 function chips(name: keyof typeof CHOICES) {
@@ -93,7 +115,7 @@ async function renderLobby() {
             <label class="dp-mode"><input type="radio" name="mode" value="async" checked /><span><b>Tantang teman</b><small>Dapat link untuk dikirim. Main kapan saja, hasil dibuka setelah dua-duanya selesai.</small></span></label>
             <label class="dp-mode"><input type="radio" name="mode" value="solo" /><span><b>Latihan sendiri</b><small>Tanpa lawan. Hasil masuk rekor, tidak masuk leaderboard lawan.</small></span></label>
           </div></fieldset>
-        ${chips('rounds')}${chips('analysisSec')}${chips('runMinutes')}
+        ${speedCards()}${pairChips()}${chips('rounds')}
         <label class="dp-toggle"><input type="checkbox" name="hardcore" /><span><b>Hardcore</b> jam juga disembunyikan</span></label>
         <button type="submit" class="dp-cta">Buat duel</button>
       </form>
@@ -155,13 +177,13 @@ function roundCard(r: DuelRoundResult, names: string[], done: boolean) {
     if (!x) return `<li class="wait"><span>${esc(n)}</span><b>${done ? '–' : '?'}</b></li>`
     return `<li class="${tone(x.r)}"><span>${esc(n)}</span><em>${SIDE[x.side] ?? x.side} · ${REASON[x.reason] ?? x.reason}</em><b>${fmtR(x.r)}</b></li>`
   }
-  return `<article class="dp-round"><header>Ronde ${r.round}${done && r.realTime ? `<small>${formatWall(r.realTime)} UTC</small>` : ''}</header><ul>${names.map(cell).join('')}</ul></article>`
+  return `<article class="dp-round"><header>Ronde ${r.round}${done && r.symbol ? ` · ${r.symbol}` : ''}${done && r.realTime ? `<small>${formatWall(r.realTime)} UTC</small>` : ''}</header><ul>${names.map(cell).join('')}</ul></article>`
 }
 
 async function renderDuel(code: string) {
   const d: DuelDetail = await duelApi.get(code)
   const total = typeof d.rounds === 'number' ? d.rounds : d.rounds.length
-  const params = `${total} ronde · analisa ${d.analysisSec < 60 ? `${d.analysisSec} dtk` : `${d.analysisSec / 60} mnt`} · jalan ${d.runMinutes} mnt${d.hardcore ? ' · hardcore' : ''}`
+  const params = `${total} ronde · ${speedName(d.analysisSec)} · ${d.pair && d.pair !== 'random' ? d.pair : 'pair acak'} · hasil ${runText(d.runMinutes)}${d.hardcore ? ' · hardcore' : ''}`
   const back = '<a class="dp-back" href="/duel.html">← Semua duel</a>'
   const link = `${location.origin}${duelUrl(d.code)}`
   const share = d.mode === 'async' ? `<div class="dp-share"><input readonly value="${esc(link)}" aria-label="Link duel" /><button type="button" class="dp-btn" data-a="copy" data-link="${esc(link)}">Salin link</button></div>` : ''
@@ -230,7 +252,7 @@ app.addEventListener('submit', async (e) => {
         mode: fd.get('mode') as 'solo' | 'async',
         rounds: Number(fd.get('rounds')),
         analysisSec: Number(fd.get('analysisSec')),
-        runMinutes: Number(fd.get('runMinutes')),
+        pair: String(fd.get('pair') ?? 'random'),
         hardcore: fd.get('hardcore') === 'on',
       })
       location.href = duelUrl(code)

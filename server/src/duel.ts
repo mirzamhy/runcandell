@@ -28,7 +28,8 @@ import {
 } from '../../web/src/engine/duel.ts'
 import type { Env } from './app.ts'
 import { HttpError, json } from './http.ts'
-import type { MarketData } from './market.ts'
+import type { MarketData, MarketSource } from './market.ts'
+import { instrument } from '../../web/src/instruments.ts'
 
 /** seconds of network slack on top of the analysis timer */
 export const GRACE = 5
@@ -43,6 +44,7 @@ interface DuelRow {
   analysis_sec: number
   run_minutes: number
   hardcore: number
+  pair: string
   status: 'open' | 'done'
   created_by: number
   created_at: number
@@ -51,6 +53,7 @@ interface RoundRow {
   round_no: number
   cut_time: number
   k: number
+  symbol: string
 }
 interface DecisionRow {
   round_no: number
@@ -74,11 +77,12 @@ const pick = <T extends readonly unknown[]>(v: unknown, allowed: T, field: strin
   return v as T[number]
 }
 
-export function mountDuels(app: Hono<Env>, db: DatabaseSync, market: MarketData | null, now: () => number) {
-  const needMarket = (): MarketData => {
-    if (!market) throw new HttpError(503, 'Data candle belum tersedia di server.')
-    return market
+export function mountDuels(app: Hono<Env>, db: DatabaseSync, source: MarketSource | null, now: () => number) {
+  const needSource = (): MarketSource => {
+    if (!source) throw new HttpError(503, 'Data candle belum tersedia di server.')
+    return source
   }
+  const needMarket = (symbol: string): MarketData => needSource().of(symbol)
 
   const duelByCode = (code: string): DuelRow => {
     const d = db.prepare('SELECT * FROM duels WHERE code = ?').get(code.toUpperCase()) as DuelRow | undefined
@@ -91,7 +95,7 @@ export function mountDuels(app: Hono<Env>, db: DatabaseSync, market: MarketData 
       .all(duelId) as { user_id: number; nickname: string; finished_at: number | null; total_r: number | null }[]
   const isMember = (duelId: number, userId: number) => !!db.prepare('SELECT 1 FROM duel_players WHERE duel_id = ? AND user_id = ?').get(duelId, userId)
   const roundOf = (duelId: number, n: number) => {
-    const r = db.prepare('SELECT round_no, cut_time, k FROM duel_rounds WHERE duel_id = ? AND round_no = ?').get(duelId, n) as RoundRow | undefined
+    const r = db.prepare('SELECT round_no, cut_time, k, symbol FROM duel_rounds WHERE duel_id = ? AND round_no = ?').get(duelId, n) as RoundRow | undefined
     if (!r) throw new HttpError(404, 'Ronde tidak ditemukan.')
     return r
   }
@@ -133,21 +137,26 @@ export function mountDuels(app: Hono<Env>, db: DatabaseSync, market: MarketData 
 
   // ---------- market helpers ----------
 
-  async function pickRounds(m: MarketData, count: number, runMinutes: number): Promise<{ cut: number; k: number }[]> {
-    const span = await m.span()
-    const lo = span.from + 45 * DAY // enough history for H4/D1 context
-    const hi = span.to - 2 * DAY - runMinutes * 60
-    if (hi <= lo) throw new HttpError(503, 'Data candle terlalu pendek untuk duel.')
-    const out: { cut: number; k: number }[] = []
-    for (let tries = 0; out.length < count && tries < count * 30; tries++) {
+  /** Cuts for every round; `pool` = instruments to draw from (one each round, at random). */
+  async function pickRounds(src: MarketSource, pool: string[], count: number, runMinutes: number): Promise<{ symbol: string; cut: number; k: number }[]> {
+    const spans = new Map<string, { from: number; to: number }>()
+    const out: { symbol: string; cut: number; k: number }[] = []
+    for (let tries = 0; out.length < count && tries < count * 40; tries++) {
+      const symbol = pool[randomInt(0, pool.length)]
+      const m = src.of(symbol)
+      if (!spans.has(symbol)) spans.set(symbol, await m.span())
+      const span = spans.get(symbol)!
+      const lo = span.from + 45 * DAY // enough history for H4/D1 context
+      const hi = span.to - 2 * DAY - runMinutes * 60
+      if (hi <= lo) continue
       const t = lo + randomInt(0, hi - lo)
       const m1 = await m.bars('M1', t, t + 3 * DAY)
       if (m1.length < runMinutes + 2) continue
       const i = findCut(m1, randomInt(0, Math.max(1, Math.min(m1.length - runMinutes - 1, 1440))), runMinutes)
       if (i < 0) continue
       const cut = m1[i].time
-      if (out.some((x) => Math.abs(x.cut - cut) < DAY)) continue
-      out.push({ cut, k: Math.round((0.7 + randomInt(0, 701) / 1000) * 1000) / 1000 })
+      if (out.some((x) => x.symbol === symbol && Math.abs(x.cut - cut) < DAY)) continue
+      out.push({ symbol, cut, k: Math.round((0.7 + randomInt(0, 701) / 1000) * 1000) / 1000 })
     }
     if (out.length < count) throw new HttpError(503, 'Gagal memilih titik potong. Coba lagi.')
     return out
@@ -157,7 +166,8 @@ export function mountDuels(app: Hono<Env>, db: DatabaseSync, market: MarketData 
     const m1 = await m.bars('M1', r.cut_time - 5 * DAY, r.cut_time + 1)
     const i = floorIdx(m1, r.cut_time)
     if (i < 0 || m1[i].time !== r.cut_time) throw new HttpError(503, 'Candle titik potong tidak ditemukan.')
-    return { m1, cut: m1[i], norm: makeNorm(m1[i], r.k) }
+    // every pair moves on screen about like gold: k x the instrument's scale
+    return { m1, cut: m1[i], norm: makeNorm(m1[i], r.k * instrument(r.symbol).duelScale) }
   }
 
   async function future(m: MarketData, r: RoundRow, runMinutes: number) {
@@ -195,20 +205,25 @@ export function mountDuels(app: Hono<Env>, db: DatabaseSync, market: MarketData 
     const b = await json(c)
     const mode = pick(b.mode, ['solo', 'async'] as const, 'Mode')
     const rounds = pick(b.rounds, [1, 3, 5, 7, 10] as const, 'Jumlah ronde')
-    const analysisSec = pick(b.analysisSec, [30, 60, 90, 120, 180, 300] as const, 'Waktu analisa')
-    const runMinutes = pick(b.runMinutes, [30, 60, 90, 120, 240] as const, 'Jendela run')
+    // analysis modes: Kilat 60 s, Normal 180 s, Mendalam 600 s (older values still accepted)
+    const analysisSec = pick(b.analysisSec, [30, 60, 90, 120, 180, 300, 600] as const, 'Waktu analisa')
+    // the result always runs one day after the decision, the same for everyone
+    const runMinutes = b.runMinutes === undefined ? 1440 : pick(b.runMinutes, [30, 60, 90, 120, 240, 1440] as const, 'Jendela run')
     const hardcore = b.hardcore === true
-    const chosen = await pickRounds(needMarket(), rounds, runMinutes)
+    const src = needSource()
+    const available = await src.symbols()
+    const pair = b.pair === undefined || b.pair === 'random' ? 'random' : pick(b.pair, available, 'Pair')
+    const chosen = await pickRounds(src, pair === 'random' ? available : [pair], rounds, runMinutes)
     let code = ''
     for (let i = 0; i < 8; i++) code += CODE_CHARS[randomInt(0, CODE_CHARS.length)]
     const user = c.get('user')
     db.exec('BEGIN')
     try {
       const r = db
-        .prepare("INSERT INTO duels (code, mode, rounds, analysis_sec, run_minutes, hardcore, status, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, 'open', ?, ?)")
-        .run(code, mode, rounds, analysisSec, runMinutes, hardcore ? 1 : 0, user.id, now())
+        .prepare("INSERT INTO duels (code, mode, rounds, analysis_sec, run_minutes, hardcore, pair, status, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)")
+        .run(code, mode, rounds, analysisSec, runMinutes, hardcore ? 1 : 0, pair, user.id, now())
       const id = Number(r.lastInsertRowid)
-      chosen.forEach((x, i) => db.prepare('INSERT INTO duel_rounds (duel_id, round_no, cut_time, k) VALUES (?, ?, ?, ?)').run(id, i + 1, x.cut, x.k))
+      chosen.forEach((x, i) => db.prepare('INSERT INTO duel_rounds (duel_id, round_no, cut_time, k, symbol) VALUES (?, ?, ?, ?, ?)').run(id, i + 1, x.cut, x.k, x.symbol))
       db.prepare('INSERT INTO duel_players (duel_id, user_id, joined_at) VALUES (?, ?, ?)').run(id, user.id, now())
       db.exec('COMMIT')
     } catch (e) {
@@ -248,7 +263,7 @@ export function mountDuels(app: Hono<Env>, db: DatabaseSync, market: MarketData 
   app.get('/api/duels/:code', (c) => {
     const user = c.get('user')
     const d = duelByCode(c.req.param('code'))
-    const params = { code: d.code, mode: d.mode, rounds: d.rounds, analysisSec: d.analysis_sec, runMinutes: d.run_minutes, hardcore: !!d.hardcore }
+    const params = { code: d.code, mode: d.mode, rounds: d.rounds, analysisSec: d.analysis_sec, runMinutes: d.run_minutes, hardcore: !!d.hardcore, pair: d.pair }
     const member = isMember(d.id, user.id)
     const ps = players(d.id)
     if (!member) {
@@ -258,7 +273,7 @@ export function mountDuels(app: Hono<Env>, db: DatabaseSync, market: MarketData 
     sweep(d, user.id)
     const status = (db.prepare('SELECT status FROM duels WHERE id = ?').get(d.id) as { status: string }).status
     const done = status === 'done'
-    const rounds = (db.prepare('SELECT round_no, cut_time, k FROM duel_rounds WHERE duel_id = ? ORDER BY round_no').all(d.id) as unknown as RoundRow[]).map((r) => {
+    const rounds = (db.prepare('SELECT round_no, cut_time, k, symbol FROM duel_rounds WHERE duel_id = ? ORDER BY round_no').all(d.id) as unknown as RoundRow[]).map((r) => {
       const all = decisions(d.id).filter((x) => x.round_no === r.round_no && x.side !== null)
       const visible = done ? all : all.filter((x) => x.user_id === user.id)
       return {
@@ -266,6 +281,7 @@ export function mountDuels(app: Hono<Env>, db: DatabaseSync, market: MarketData 
         // the real date and scale are revealed only after the duel is over
         realTime: done ? r.cut_time : null,
         k: done ? r.k : null,
+        symbol: done ? r.symbol : null,
         results: visible.map((x) => ({ nickname: ps.find((p) => p.user_id === x.user_id)?.nickname ?? '?', side: x.side, r: x.r, reason: x.reason })),
       }
     })
@@ -302,8 +318,8 @@ export function mountDuels(app: Hono<Env>, db: DatabaseSync, market: MarketData 
     sweep(d, user.id)
     const next = currentRound(d, user.id)
     if (next !== n) throw new HttpError(409, next === null ? 'Duel sudah selesai.' : `Sekarang ronde ${next}.`)
-    const m = needMarket()
     const r = roundOf(d.id, n)
+    const m = needMarket(r.symbol)
     let row = db.prepare('SELECT * FROM duel_decisions WHERE duel_id = ? AND round_no = ? AND user_id = ?').get(d.id, n, user.id) as DecisionRow | undefined
     if (!row) {
       db.prepare('INSERT INTO duel_decisions (duel_id, round_no, user_id, sent_at) VALUES (?, ?, ?, ?)').run(d.id, n, user.id, now())
@@ -336,8 +352,8 @@ export function mountDuels(app: Hono<Env>, db: DatabaseSync, market: MarketData 
     const n = roundParam(c)
     const row = db.prepare('SELECT * FROM duel_decisions WHERE duel_id = ? AND round_no = ? AND user_id = ?').get(d.id, n, user.id) as DecisionRow | undefined
     if (!row) throw new HttpError(409, 'Ronde belum dimulai.')
-    const m = needMarket()
     const r = roundOf(d.id, n)
+    const m = needMarket(r.symbol)
     const { m1, cut, norm } = await cutContext(m, r)
 
     let outcome: Outcome
@@ -380,6 +396,8 @@ export function mountDuels(app: Hono<Env>, db: DatabaseSync, market: MarketData 
       breaks,
       finished: me.finished_at !== null,
       totalR: me.total_r,
+      // the pair is revealed once you have decided
+      symbol: r.symbol,
     })
   })
 

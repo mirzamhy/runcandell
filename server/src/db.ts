@@ -116,6 +116,11 @@ const MIGRATIONS = [
   ALTER TABLE duel_decisions ADD COLUMN order_type TEXT;
   ALTER TABLE duel_decisions ADD COLUMN order_price REAL;
   `,
+  // several instruments: each round has its own, the duel remembers the choice (a symbol or 'random')
+  `
+  ALTER TABLE duel_rounds ADD COLUMN symbol TEXT NOT NULL DEFAULT 'XAUUSD';
+  ALTER TABLE duels ADD COLUMN pair TEXT NOT NULL DEFAULT 'XAUUSD';
+  `,
 ]
 
 export function openDb(path: string): DatabaseSync {

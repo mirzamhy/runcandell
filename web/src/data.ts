@@ -12,26 +12,42 @@ import { TF_SECONDS } from './types'
 
 const DATA_URL = (import.meta.env.VITE_DATA_URL ?? '/data').replace(/\/$/, '')
 
-export async function loadManifest(): Promise<Manifest> {
-  const res = await fetch(`${DATA_URL}/manifest.json`)
-  if (!res.ok) throw new Error(`manifest.json: HTTP ${res.status}`)
+export interface SymbolInfo {
+  symbol: string
+  label: string
+  digits: number
+  from: number
+  to: number
+}
+
+/** instruments that have data (data/build/symbols.json) */
+export async function loadSymbols(): Promise<SymbolInfo[]> {
+  const res = await fetch(`${DATA_URL}/symbols.json`)
+  if (!res.ok) throw new Error(`symbols.json: HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function loadManifest(symbol: string): Promise<Manifest> {
+  const res = await fetch(`${DATA_URL}/${symbol}/manifest.json`)
+  if (!res.ok) throw new Error(`${symbol}/manifest.json: HTTP ${res.status}`)
   return res.json()
 }
 
 const chunkCache = new Map<string, Promise<Bar[]>>()
 
 function loadChunk(m: Manifest, c: ChunkInfo): Promise<Bar[]> {
-  let p = chunkCache.get(c.file)
+  const key = `${m.symbol}/${c.file}`
+  let p = chunkCache.get(key)
   if (!p) {
     p = readChunk(m, c)
-    chunkCache.set(c.file, p)
-    p.catch(() => chunkCache.delete(c.file))
+    chunkCache.set(key, p)
+    p.catch(() => chunkCache.delete(key))
   }
   return p
 }
 
 async function readChunk(m: Manifest, c: ChunkInfo): Promise<Bar[]> {
-  const res = await fetch(`${DATA_URL}/${c.file}`)
+  const res = await fetch(`${DATA_URL}/${m.symbol}/${c.file}`)
   if (!res.ok) throw new Error(`${c.file}: HTTP ${res.status}`)
   const file = await res.arrayBuffer()
   const rows = (await parquetReadObjects({ file, compressors })) as Record<string, number>[]

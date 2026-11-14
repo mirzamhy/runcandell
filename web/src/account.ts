@@ -3,6 +3,7 @@ import { ApiError, api, type BacktestItem, type JournalEntry, type JournalTrade,
 import { formatWall, makeShifter } from './time'
 import { toast } from './trade'
 import { ask } from './shared/ask'
+import { px } from './current'
 
 type Tab = 'journal' | 'replays' | 'backtests' | 'account'
 const TABS: [Tab, string][] = [
@@ -225,7 +226,7 @@ export class AccountUI {
       .map((e) => {
         const t = e.trade
         const head = t
-          ? `<b class="${t.side === 'buy' ? 'pos' : 'neg'}">${t.side.toUpperCase()} ${t.lots.toFixed(2)}</b> ${t.entry.toFixed(2)} → ${t.exit.toFixed(2)} · ${REASON[t.reason] ?? t.reason}
+          ? `<b class="${t.side === 'buy' ? 'pos' : 'neg'}">${t.side.toUpperCase()} ${t.lots.toFixed(2)}</b> ${px(t.entry)} → ${px(t.exit)} · ${REASON[t.reason] ?? t.reason}
              · <b class="${cls(t.pnl)}">${usd(t.pnl, true)}</b>${t.r !== null ? ` · ${t.r.toFixed(2)}R` : ''}`
           : '<b>Catatan</b>'
         const when = t ? this.fmt(t.openTime) : this.fmt(e.created_at)
@@ -411,7 +412,7 @@ export class AccountUI {
         <h3>${e ? 'Ubah jurnal' : 'Jurnal trade'}</h3>
         ${
           t
-            ? `<p class="jr-trade"><b class="${t.side === 'buy' ? 'pos' : 'neg'}">${t.side.toUpperCase()} ${t.lots.toFixed(2)}</b> ${t.entry.toFixed(2)} → ${t.exit.toFixed(2)}
+            ? `<p class="jr-trade"><b class="${t.side === 'buy' ? 'pos' : 'neg'}">${t.side.toUpperCase()} ${t.lots.toFixed(2)}</b> ${px(t.entry)} → ${px(t.exit)}
                · ${REASON[t.reason] ?? t.reason} · <b class="${cls(t.pnl)}">${usd(t.pnl, true)}</b>${t.r !== null ? ` · ${t.r.toFixed(2)}R` : ''}<br /><span class="bt-muted">${this.fmt(t.openTime)} → ${this.fmt(t.closeTime)}</span></p>`
             : ''
         }

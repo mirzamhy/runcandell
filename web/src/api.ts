@@ -122,8 +122,11 @@ export interface DuelParams {
   mode: 'solo' | 'async'
   rounds: number
   analysisSec: number
-  runMinutes: number
+  /** server default: 1 day */
+  runMinutes?: number
   hardcore: boolean
+  /** an instrument, or 'random' (each round its own) */
+  pair?: string
 }
 
 export interface DuelPlayer {
@@ -133,7 +136,8 @@ export interface DuelPlayer {
 }
 
 /** GET /duels/:code. `rounds` is a number for non-members, the per-round results for members. */
-export interface DuelDetail extends Omit<DuelParams, 'rounds'> {
+export interface DuelDetail extends Omit<DuelParams, 'rounds' | 'runMinutes'> {
+  runMinutes: number
   code: string
   member: boolean
   joinable?: boolean
@@ -147,6 +151,8 @@ export interface DuelRoundResult {
   round: number
   realTime: number | null
   k: number | null
+  /** pair, after the duel is over */
+  symbol?: string | null
   results: { nickname: string; side: string; r: number; reason: string }[]
 }
 
@@ -192,6 +198,8 @@ export interface DecideResult {
   breaks: Partial<Record<import('./types').TF, number[]>>
   finished: boolean
   totalR: number | null
+  /** the round's pair, revealed after deciding */
+  symbol?: string
 }
 
 export const duelApi = {

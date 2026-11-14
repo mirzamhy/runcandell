@@ -66,3 +66,39 @@ export class ParquetMarket implements MarketData {
     return out
   }
 }
+
+/** Every instrument with data: data/build/<SYMBOL>/ plus data/build/symbols.json. */
+export interface MarketSource {
+  symbols(): Promise<string[]>
+  of(symbol: string): MarketData
+}
+
+export class ParquetMarkets implements MarketSource {
+  private readonly root: string
+  private readonly markets = new Map<string, ParquetMarket>()
+  private list: Promise<string[]> | null = null
+
+  constructor(root: string) {
+    this.root = root
+  }
+
+  symbols() {
+    this.list ??= readFile(join(this.root, 'symbols.json'), 'utf8').then(
+      (s) => (JSON.parse(s) as { symbol: string }[]).map((x) => x.symbol),
+      () => ['XAUUSD'],
+    )
+    return this.list
+  }
+
+  of(symbol: string): MarketData {
+    let m = this.markets.get(symbol)
+    if (!m) {
+      m = new ParquetMarket(join(this.root, symbol))
+      this.markets.set(symbol, m)
+    }
+    return m
+  }
+}
+
+/** one data set as gold (tests) */
+export const singleMarket = (m: MarketData, symbol = 'XAUUSD'): MarketSource => ({ symbols: async () => [symbol], of: () => m })

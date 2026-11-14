@@ -401,6 +401,7 @@ export class DuelUI {
       <div class="dp-res ${cls(o.r)}">
         <b>${fmtR(o.r)}</b>
         <span>${o.side === 'skip' ? 'Skip' : `${o.side.toUpperCase()} ${TYPE[type].toUpperCase()}`} · ${REASON[o.reason] ?? o.reason}</span>
+        ${res.symbol ? `<span class="dp-pair">Pair ronde ini: <b>${res.symbol}</b></span>` : ''}
       </div>
       <dl class="dp-dl">
         ${o.price !== null && o.price !== undefined ? row('Harga order', o.price.toFixed(2)) : ''}
@@ -530,13 +531,15 @@ export class DuelUI {
     if (o.tp !== null) lines.push({ field: 'tp', price: o.tp, title: 'TP', color: COLOR.tp, solid: false, drag: false })
     this.host.setLines(lines)
     this.render()
+    // a full day is 1440 minutes: play it in about 5 s, several minutes per frame
     const total = res.future.length
-    const stepMs = Math.max(15, Math.min(70, 4000 / Math.max(1, total)))
-    for (const m of res.future) {
+    const frames = Math.min(total, 200)
+    const per = Math.max(1, Math.ceil(total / Math.max(1, frames)))
+    for (let i = 0; i < total; i += per) {
       if (this.play !== p) return
-      appendMinute(p.bars, m, res.breaks)
+      for (const m of res.future.slice(i, i + per)) appendMinute(p.bars, m, res.breaks)
       this.host.update()
-      await new Promise((r) => setTimeout(r, stepMs))
+      await new Promise((r) => setTimeout(r, 25))
     }
     const marks: DuelMarker[] = []
     if (o.side !== 'skip' && o.entry !== null) {

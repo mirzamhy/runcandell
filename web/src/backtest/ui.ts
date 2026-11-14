@@ -20,6 +20,8 @@ import {
 } from './strategy'
 import type { OptRow, RunReport, WorkerIn, WorkerOut } from './worker'
 import { ask } from '../shared/ask'
+import { px } from '../current'
+import { current } from '../current'
 
 type Tab = 'strategy' | 'result' | 'trades' | 'optimize' | 'compare'
 const TABS: [Tab, string][] = [
@@ -602,7 +604,7 @@ export class BacktestUI {
     const err = this.validate()
     if (err) return toast(err, 'bad')
     this.setRunning(true, 'Mulai…')
-    this.post({ id: ++this.jobId, kind: 'run', spec: structuredClone(this.spec), zone: this.o.zone() })
+    this.post({ id: ++this.jobId, kind: 'run', spec: structuredClone(this.spec), zone: this.o.zone(), symbol: current().symbol })
   }
 
   private cancel() {
@@ -721,7 +723,7 @@ export class BacktestUI {
       .slice(0, LIMIT)
       .map(
         (t, i) => `<tr data-jump="${i}" tabindex="0"><td>${i + 1}</td><td class="${t.side === 'buy' ? 'buy' : 'sell'}">${t.side.toUpperCase()}</td>
-          <td>${z.fmt(t.openTime)}</td><td>${t.entry.toFixed(2)}</td><td>${z.fmt(t.closeTime)}</td><td>${t.exit.toFixed(2)}</td>
+          <td>${z.fmt(t.openTime)}</td><td>${px(t.entry)}</td><td>${z.fmt(t.closeTime)}</td><td>${px(t.exit)}</td>
           <td>${REASON[t.reason] ?? t.reason}</td><td>${t.lots.toFixed(2)}</td><td class="${cls(t.pnl)}">${usd(t.pnl, true)}</td>
           <td class="${cls(t.r ?? 0)}">${t.r === null ? '–' : t.r.toFixed(2) + 'R'}</td></tr>`,
       )
@@ -814,7 +816,7 @@ export class BacktestUI {
       }
     this.opt = { rows: [], specs, labels, names: [name(f.p1), f.p2 ? name(f.p2) : null], isEnd: 0 }
     this.setRunning(true, 'Mulai optimasi…')
-    this.post({ id: ++this.jobId, kind: 'optimize', specs, split: SPLIT, zone: this.o.zone(), top: 5 })
+    this.post({ id: ++this.jobId, kind: 'optimize', specs, split: SPLIT, zone: this.o.zone(), top: 5, symbol: current().symbol })
   }
 
   private optResultsHtml(): string {

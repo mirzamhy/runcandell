@@ -26,8 +26,8 @@ export interface OptRow {
 }
 
 export type WorkerIn =
-  | { id: number; kind: 'run'; spec: StrategySpec; zone: string }
-  | { id: number; kind: 'optimize'; specs: StrategySpec[]; split: number; zone: string; top: number }
+  | { id: number; kind: 'run'; spec: StrategySpec; zone: string; symbol: string }
+  | { id: number; kind: 'optimize'; specs: StrategySpec[]; split: number; zone: string; top: number; symbol: string }
 
 export type WorkerOut =
   | { id: number; kind: 'progress'; text: string }
@@ -37,7 +37,8 @@ export type WorkerOut =
 
 const post = (m: WorkerOut) => (self as unknown as Worker).postMessage(m)
 
-let manifest: Promise<Manifest> | null = null
+const manifests = new Map<string, Promise<Manifest>>()
+let symbol = 'XAUUSD'
 
 interface Prepared {
   bars: Bar[]
@@ -54,13 +55,13 @@ let cached: { key: string; p: Prepared } | null = null
 const WARMUP = 600
 
 async function prepare(spec: StrategySpec, id: number): Promise<Prepared> {
-  manifest ??= loadManifest()
-  const m = await manifest
+  if (!manifests.has(symbol)) manifests.set(symbol, loadManifest(symbol))
+  const m = await manifests.get(symbol)!
   const span = dataSpan(m)
   const from = Math.max(spec.from ?? span.from, span.from)
   const to = Math.min(spec.to ?? Infinity, span.to + 60)
   if (!(to > from)) throw new Error('Rentang tanggal kosong.')
-  const key = `${spec.tf}|${from}|${to}`
+  const key = `${symbol}|${spec.tf}|${from}|${to}`
   if (cached?.key === key) return cached.p
 
   post({ id, kind: 'progress', text: 'Memuat data…' })
@@ -97,11 +98,12 @@ function runOne(p: Prepared, spec: StrategySpec, zone: string, start: number, en
         }
       }
     : signal
-  return runBacktest({ spec, bars: p.bars, tfSec: p.tfSec, m1: p.m1, signal: wrapped, atr: p.atr, start, end, hourOf: hourFn(zone) })
+  return runBacktest({ symbol, spec, bars: p.bars, tfSec: p.tfSec, m1: p.m1, signal: wrapped, atr: p.atr, start, end, hourOf: hourFn(zone) })
 }
 
 async function handle(msg: WorkerIn) {
   const { id } = msg
+  symbol = msg.symbol
   if (msg.kind === 'run') {
     const t0 = performance.now()
     const p = await prepare(msg.spec, id)

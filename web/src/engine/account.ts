@@ -62,8 +62,10 @@ export interface ClosedTrade {
 export interface AccountConfig {
   balance: number
   leverage: number
-  /** ounces per lot */
+  /** units per lot (gold: ounces) */
   contractSize: number
+  /** quote currency: P&L and margin in JPY are converted to USD at the price */
+  quoteJpy?: boolean
   /** round-turn commission per lot, account currency */
   commissionPerLot: number
   /** close everything when equity / used margin falls below this (0.5 = 50%) */
@@ -150,7 +152,8 @@ export class Account {
   }
 
   marginOf(lots: number, price: number): number {
-    return (price * this.cfg.contractSize * lots) / this.cfg.leverage
+    // USD-based pairs quoted in JPY: notional in USD is just contract x lots
+    return ((this.cfg.quoteJpy ? 1 : price) * this.cfg.contractSize * lots) / this.cfg.leverage
   }
 
   usedMargin(): number {
@@ -164,7 +167,8 @@ export class Account {
   /** Account-currency P/L for a price move, after commission. */
   pnl(side: Side, entry: number, exit: number, lots: number): number {
     const move = side === 'buy' ? exit - entry : entry - exit
-    return move * this.cfg.contractSize * lots - this.cfg.commissionPerLot * lots
+    const quote = move * this.cfg.contractSize * lots
+    return (this.cfg.quoteJpy ? quote / exit : quote) - this.cfg.commissionPerLot * lots
   }
 
   // ---------- validation ----------

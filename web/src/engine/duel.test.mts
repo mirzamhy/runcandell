@@ -59,6 +59,10 @@ eq('sell stop fills at 1995, closes at Ask 1994.2', [o.reason, o.r], ['time', 0.
 eq('buy limit above Ask rejected', checkDecision({ side: 'buy', type: 'limit', price: 2001, sl: 1995 }, c, 1), 'Buy limit harus di bawah harga Ask.')
 eq('sell stop above Bid rejected', checkDecision({ side: 'sell', type: 'stop', price: 2001, sl: 2005 }, c, 1), 'Sell stop harus di bawah harga Bid.')
 eq('pending SL measured from the order price', checkDecision({ side: 'buy', type: 'stop', price: 2003, sl: 2002.5 }, c, 1), 'SL terlalu dekat. Jarak minimal 1.00.')
+// small prices (EURUSD ~1.1): R must not suffer from rounding money to cents
+const fx = bar(0, 1.1, 1.1, 1.1, 1.1, 0.00006)
+o = runDecision(fx, [bar(60, 1.1, 1.1001, 1.0996, 1.0997, 0.00006)], { side: 'buy', sl: 1.09966 })
+eq('EURUSD SL = -1R exactly', [o.reason, o.r], ['sl', -1])
 eq('valid buy stop', checkDecision({ side: 'buy', type: 'stop', price: 2003, sl: 2001 }, c, 1), null)
 
 // 5. cut search skips windows crossing a gap

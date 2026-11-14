@@ -4,6 +4,7 @@
  */
 import { CAN, DEFAULT_STYLE, TOOL_LABEL, type Dash, type Drawing, type DrawingLayer, type DrawKind, type DrawStyle, type Magnet, type Tool } from './drawings'
 import { ask } from './shared/ask'
+import { px as fmtPx, pxStep } from './current'
 
 export const askClear = () => ask('Bisa dibatalkan dengan Ctrl+Z.', { title: 'Hapus semua gambar?', ok: 'Hapus semua', danger: true })
 
@@ -320,7 +321,7 @@ export class DrawTools {
   // ---------- object list ----------
 
   private describe(d: Drawing): string {
-    const px = (p: number) => p.toFixed(2)
+    const px = (p: number) => fmtPx(p)
     const st = this.layer.styleOf(d)
     if (d.kind === 'text') return st.text || 'Teks'
     if (st.text) return st.text
@@ -417,7 +418,7 @@ export class DrawTools {
     const coords = d.pts
       .map(
         (p, i) => `<div class="dd-pt"><b>${names[i] ?? `Titik ${i + 1}`}</b>
-          <label>Harga <input type="number" step="0.01" data-pt="${i}" data-f="p" value="${p.p.toFixed(2)}"></label>
+          <label>Harga <input type="number" step="${pxStep()}" data-pt="${i}" data-f="p" value="${fmtPx(p.p)}"></label>
           ${k === 'hline' ? '' : `<label>Waktu <input type="datetime-local" data-pt="${i}" data-f="t" value="${this.opts.toInput(p.t)}"></label>`}</div>`,
       )
       .join('')
