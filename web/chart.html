@@ -57,11 +57,16 @@
         </div>
         <div class="chart" id="chart"></div>
         <div class="pane-layer" id="pane-chips"></div>
-        <div class="pick-line" id="pick-line" hidden></div>
-        <div class="pick-bar" id="pick-bar" hidden>
-          <span><b>Pilih titik mulai:</b> klik candle. Candle sesudahnya disembunyikan.</span>
-          <button type="button" data-p="random">Acak</button>
-          <button type="button" data-p="cancel">Batal</button>
+        <div class="pick-dim" id="pick-dim" hidden></div>
+        <div class="pick-line" id="pick-line" hidden><span class="pick-tag"></span></div>
+        <div class="pick-line pick-mark" id="pick-mark" hidden><span class="pick-tag"></span></div>
+        <div class="pick-bar" id="pick-bar" role="dialog" aria-label="Pilih titik mulai replay" hidden>
+          <span class="pick-msg" id="pick-msg" aria-live="polite"></span>
+          <span class="pick-acts">
+            <button type="button" data-p="random" title="Titik acak (masih bisa digeser)">Acak</button>
+            <button type="button" data-p="cancel" title="Batal (Esc)">Batal</button>
+            <button type="button" data-p="start" class="primary" title="Mulai replay (Enter)" hidden>Mulai replay</button>
+          </span>
         </div>
         <div class="replay-bar" id="replay-bar" role="toolbar" aria-label="Kontrol replay" hidden>
           <button type="button" data-r="restart" title="Ulang dari titik awal" aria-label="Ulang dari titik awal">⏮</button>

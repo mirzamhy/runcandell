@@ -10,6 +10,7 @@ import {
   createTextWatermark,
   type CandlestickData,
   type HistogramData,
+  type Logical,
   type LogicalRange,
   type MouseEventParams,
   type SeriesMarker,
@@ -101,6 +102,10 @@ const replayBtn = $<HTMLButtonElement>('replay-btn')
 const replayBar = $('replay-bar')
 const pickBar = $('pick-bar')
 const pickLine = $('pick-line')
+const pickMark = $('pick-mark')
+const pickDim = $('pick-dim')
+const pickMsg = $('pick-msg')
+const pickStartBtn = pickBar.querySelector<HTMLButtonElement>('[data-p="start"]')!
 const tradeEl = $('trade')
 const btBtn = $<HTMLButtonElement>('bt-btn')
 const btEl = $('bt')
@@ -122,6 +127,9 @@ let busy = false
 
 let replay: Replay | null = null
 let picking = false
+/** replay start being chosen: open time of the last candle that stays visible (null = not chosen yet) */
+let pickTime: number | null = null
+let pickDragging = false
 let playing = false
 let speed = load<number>(KEY.speed, 5)
 /** bars currently on the chart (all loaded bars, or the replay-visible part) and their chart times */
@@ -891,6 +899,11 @@ async function goLatest() {
 
 /** Load neighbouring chunks when the user scrolls near the edge of what is loaded. */
 function onRangeChange(r: LogicalRange | null) {
+  // the chosen line follows scroll/zoom (again next frame, once the new coordinates are drawn)
+  if (picking) {
+    syncPick()
+    requestAnimationFrame(() => picking && syncPick())
+  }
   if (!r || busy || !store || duelBars) return
   const n = store.bars.length
   if (r.from < 200 && store.canLeft) {
@@ -984,11 +997,85 @@ function syncPlayButton() {
   b.title = playing ? 'Jeda (Spasi)' : 'Putar (Spasi)'
 }
 
-function setPicking(on: boolean) {
+// ---------- choosing the replay start: point, adjust, then confirm ----------
+
+function setPicking(on: boolean, at: number | null = null) {
   picking = on
+  pickTime = on ? at : null
+  pickDragging = false
   pickBar.hidden = !on
   pickLine.hidden = true
   chartWrap.classList.toggle('picking', on)
+  syncPick()
+}
+
+/** candle label as on the chart's time axis */
+const candleLabel = (t: number) => formatWall(displayTime(t), tf !== 'D1')
+/** index of the candle at x (clamped to the loaded bars), or null off the plot */
+function indexAtX(x: number): number | null {
+  if (x < 0 || x > chart.timeScale().width() || !store.bars.length) return null
+  const l = chart.timeScale().coordinateToLogical(x)
+  return l === null ? null : Math.max(0, Math.min(Math.round(l), store.bars.length - 1))
+}
+const pickIndex = () => (pickTime === null ? null : Math.floor(store.indexOfTime(pickTime) + 1e-6))
+
+/** where the chosen line, the dimmed future and the bar text are */
+function syncPick() {
+  const i = picking ? pickIndex() : null
+  const w = chart.timeScale().width()
+  const x = i === null ? null : chart.timeScale().logicalToCoordinate(i as Logical)
+  pickMark.hidden = x === null || x < 0 || x > w
+  // dim from half a candle after the chosen one to the right edge of the plot
+  const from = x === null ? w : Math.max(0, x + chart.timeScale().options().barSpacing / 2)
+  pickDim.hidden = from >= w
+  if (x !== null) {
+    pickMark.style.left = `${x}px`
+    pickMark.firstElementChild!.textContent = candleLabel(store.bars[i!]?.time ?? pickTime!)
+    pickDim.style.left = `${from}px`
+    pickDim.style.width = `${w - from}px`
+  }
+  pickStartBtn.hidden = pickTime === null
+  pickMsg.innerHTML =
+    pickTime === null
+      ? '<b>Pilih titik mulai:</b> klik candle. <small>Candle sesudahnya disembunyikan.</small>'
+      : `Mulai dari <b>${candleLabel(pickTime)}</b> <small>· geser garis atau ← → untuk ubah</small>`
+}
+
+function placePick(i: number) {
+  const b = store.bars[Math.max(0, Math.min(i, store.bars.length - 1))]
+  if (!b) return
+  pickTime = b.time
+  syncPick()
+}
+
+/** arrow keys: one candle (Shift: ten), and scroll along when the line leaves the screen */
+function nudgePick(step: number) {
+  const i = pickIndex()
+  if (i === null) return
+  placePick(i + step)
+  const r = chart.timeScale().getVisibleLogicalRange()
+  const j = pickIndex()!
+  if (r && (j < r.from + 2 || j > r.to - 2)) {
+    const span = r.to - r.from
+    chart.timeScale().setVisibleLogicalRange({ from: j - span * 0.7, to: j + span * 0.3 })
+  }
+}
+
+async function pickRandom() {
+  const t = randomStart()
+  await goTo(t)
+  chart.clearCrosshairPosition()
+  if (!picking) return
+  placePick(Math.floor(store.indexOfTime(t)))
+  pickStartBtn.focus() // Enter now starts, arrows still nudge
+}
+
+function confirmPick() {
+  if (pickTime === null) return
+  const i = pickIndex()
+  const b = i === null ? null : store.bars[i]
+  // start at the end of the chosen candle: it is the last one shown
+  if (b) void startReplay(b.time + store.tfSec - 1)
 }
 
 function randomStart(): number {
@@ -1094,36 +1181,51 @@ function buildReplayControls() {
 
   pickBar.addEventListener('click', (e) => {
     const act = (e.target as HTMLElement).closest<HTMLElement>('[data-p]')?.dataset.p
-    if (act === 'random') void startReplay(randomStart())
+    if (act === 'random') void pickRandom()
+    if (act === 'start') confirmPick()
     if (act === 'cancel') setPicking(false)
   })
 
-  // pick the start candle: capture phase on the wrapper runs before chart and drawing handlers
+  // choose the start candle: capture phase on the wrapper runs before chart and drawing handlers.
+  // Press = put the line there, drag = move it; nothing starts until "Mulai replay" / Enter.
+  const plotX = (e: PointerEvent) => e.clientX - chartEl.getBoundingClientRect().left
   chartWrap.addEventListener(
     'pointerdown',
     (e) => {
-      if (!picking || e.button !== 0) return
-      const rect = chartEl.getBoundingClientRect()
-      const x = e.clientX - rect.left
-      if (x < 0 || x > chart.timeScale().width()) return
+      if (!picking || e.button !== 0 || (e.target as HTMLElement).closest('.pick-bar, .legend-stack')) return
+      const i = indexAtX(plotX(e))
+      if (i === null) return
       e.stopPropagation()
       e.preventDefault()
-      const l = chart.timeScale().coordinateToLogical(x)
-      if (l === null) return
-      const i = Math.max(0, Math.min(Math.round(l), store.bars.length - 1))
-      const bar = store.bars[i]
-      // start at the end of the clicked candle: it is the last one shown
-      void startReplay(bar.time + store.tfSec - 1)
+      pickDragging = true
+      chartWrap.setPointerCapture(e.pointerId)
+      placePick(i)
     },
     true,
   )
-  chartWrap.addEventListener('pointermove', (e) => {
-    if (!picking) return
-    const rect = chartWrap.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    pickLine.hidden = x > chart.timeScale().width()
-    pickLine.style.left = `${x}px`
-  })
+  chartWrap.addEventListener(
+    'pointermove',
+    (e) => {
+      if (!picking) return
+      const i = indexAtX(plotX(e))
+      if (pickDragging) {
+        e.stopPropagation()
+        if (i !== null) placePick(i)
+      }
+      // hover line snaps to the candle under the cursor and shows its time
+      const x = i === null ? null : chart.timeScale().logicalToCoordinate(i as Logical)
+      pickLine.hidden = x === null || pickDragging || e.pointerType === 'touch'
+      if (x !== null) {
+        pickLine.style.left = `${x}px`
+        pickLine.firstElementChild!.textContent = candleLabel(store.bars[i!].time)
+      }
+    },
+    true,
+  )
+  const endDrag = () => (pickDragging = false)
+  chartWrap.addEventListener('pointerup', endDrag)
+  chartWrap.addEventListener('pointercancel', endDrag)
+  chartWrap.addEventListener('pointerleave', () => (pickLine.hidden = true))
 
   replayBar.addEventListener('click', (e) => {
     const act = (e.target as HTMLElement).closest<HTMLElement>('[data-r]')?.dataset.r
@@ -1159,8 +1261,19 @@ function buildReplayControls() {
 
   window.addEventListener('keydown', (e) => {
     const tag = (e.target as HTMLElement | null)?.tagName
-    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || tag === 'BUTTON') return
-    if (picking && e.key === 'Escape') setPicking(false)
+    if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return
+    if (picking) {
+      if (e.key === 'Escape') setPicking(false)
+      else if (e.key === 'Enter') {
+        if (tag !== 'BUTTON') confirmPick() // a focused button does its own thing
+      }
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault()
+        nudgePick((e.key === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 10 : 1))
+      }
+      return
+    }
+    if (tag === 'BUTTON') return
     if (!replay) return
     if (e.key === 'ArrowRight' && e.shiftKey) {
       e.preventDefault()
@@ -1229,7 +1342,8 @@ function buildContextMenu() {
           const l = chart.timeScale().coordinateToLogical(x)
           if (l === null) return
           const bar = store.bars[Math.max(0, Math.min(Math.round(l), store.bars.length - 1))]
-          void startReplay(bar.time + store.tfSec - 1)
+          // same confirm step as the Replay button: the line can still be moved
+          setPicking(true, bar.time)
         },
       })
     }

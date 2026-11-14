@@ -536,8 +536,47 @@ body.replay .workspace {
   pointer-events: none;
 }
 
+/* the chosen start: solid line, stays while the cursor moves on */
+.pick-mark {
+  border-left-style: solid;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+/* date/time of the candle under the line, on the time axis */
+.pick-tag {
+  position: absolute;
+  bottom: -24px;
+  left: 0;
+  transform: translateX(-50%);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--bg);
+  background: var(--accent);
+}
+.pick-line:not(.pick-mark) .pick-tag {
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--accent);
+}
+
+/* candles after the chosen start: dimmed, these get hidden once the replay starts */
+.pick-dim {
+  position: absolute;
+  top: 0;
+  bottom: 28px;
+  z-index: 3;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  border-left: 1px solid transparent;
+}
+
 .pick-line[hidden],
+.pick-dim[hidden],
 .pick-bar[hidden],
+.pick-bar button[hidden],
 .replay-bar[hidden],
 .trade[hidden] {
   display: none;
@@ -548,17 +587,42 @@ body.replay .workspace {
   left: 50%;
   top: 12px;
   transform: translateX(-50%);
-  z-index: 6;
+  z-index: 7;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 6px 10px;
   max-width: calc(100% - 24px);
-  padding: 6px 8px;
+  padding: 6px 8px 6px 12px;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
   white-space: nowrap;
+}
+.pick-msg {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pick-msg small {
+  color: var(--muted);
+}
+.pick-acts {
+  display: flex;
+  gap: 6px;
+  flex: none;
+}
+@media (max-width: 640px) {
+  .pick-bar {
+    flex-wrap: wrap;
+    justify-content: center;
+    width: calc(100% - 16px);
+    top: 8px;
+    white-space: normal;
+    text-align: center;
+  }
+  .pick-msg small {
+    display: none;
+  }
 }
 
 /* replay controls: a docked strip under the chart, so they never cover candles */
