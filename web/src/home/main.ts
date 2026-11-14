@@ -3,6 +3,8 @@ import { ApiError, api, duelApi, statsApi, type DuelListItem, type Stats, type U
 import type { Arena3D } from './arena3d'
 import { mountLogos } from '../shared/brand'
 import { EYES_SIGIL, maskEyesSvg, maskSvg } from './mask'
+import '../shared/theme.css'
+import '../shared/shell.css'
 import './home.css'
 
 // old share links pointed at "/?duel=CODE": duels have their own page now

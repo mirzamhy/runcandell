@@ -10,16 +10,23 @@
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Unbounded:wght@600;700;800&display=swap" rel="stylesheet" />
   </head>
   <body class="duel-page">
-    <header class="dp-top">
-      <a class="brand" href="/" title="Ke arena"><span class="logo"></span>duelcandle</a>
-      <nav class="dp-nav">
-        <a href="/">Arena</a>
-        <a href="/chart.html">Chart</a>
-        <a href="/duel.html" aria-current="page">Duel</a>
-      </nav>
-      <span class="dp-me" id="me"></span>
-    </header>
-    <main id="app" class="dp-main"><p class="dp-loading">Memuat…</p></main>
+    <div class="shell">
+      <aside class="side">
+        <a class="brand" href="/"><span class="logo"></span>duelcandle</a>
+        <nav class="navs">
+          <a class="nav on" href="/duel.html" aria-current="page"><svg viewBox="0 0 24 24"><path d="M4 20 14 10M10 4l6 6M20 20 10 10M14 4 8 10" /></svg><span>Duel</span></a>
+          <a class="nav" href="/chart.html"><svg viewBox="0 0 24 24"><path d="M6 4v16M6 8H4v6h2M12 6v14M12 9h2v5h-2M18 3v15M18 6h2v7h-2" /></svg><span>Chart</span></a>
+          <a class="nav" href="/#board"><svg viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4" /></svg><span>Leaderboard</span></a>
+          <span class="nav locked" aria-disabled="true" title="Segera hadir"><svg viewBox="0 0 24 24"><path d="M4 5h6a2 2 0 0 1 2 2v13a2 2 0 0 0-2-2H4zM20 5h-6a2 2 0 0 0-2 2v13a2 2 0 0 1 2-2h6z" /></svg><span>Materi</span><svg class="lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg></span>
+        </nav>
+        <div class="me" id="me" hidden>
+          <span class="avatar"></span>
+          <div><b id="me-name"></b><span id="me-rank">Tamu</span></div>
+          <button class="logout" id="logout" type="button" title="Keluar" aria-label="Keluar"><svg viewBox="0 0 24 24"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10" /></svg></button>
+        </div>
+      </aside>
+      <main id="app" class="dp-main"><p class="dp-loading">Memuat…</p></main>
+    </div>
     <div class="dp-toasts" id="toasts" aria-live="polite"></div>
     <script type="module" src="/src/duelpage/main.ts"></script>
   </body>

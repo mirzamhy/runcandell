@@ -496,7 +496,6 @@ button.primary:hover {
 /* ---------- replay + paper trading ---------- */
 
 #replay-btn,
-#duel-btn,
 #bt-btn {
   display: inline-flex;
   align-items: center;
@@ -504,7 +503,6 @@ button.primary:hover {
 }
 
 #replay-btn svg,
-#duel-btn svg,
 #bt-btn svg {
   width: 16px;
   height: 16px;
@@ -2068,6 +2066,15 @@ body.duel .pane-layer {
 .tools {
   overflow-y: auto;
   overflow-x: visible;
+  /* scrolls on short screens, but no visible bar */
+  scrollbar-width: none;
+}
+.tools::-webkit-scrollbar {
+  display: none;
+}
+/* fixed size: never squeeze a tool button when the column is short */
+.tools > * {
+  flex: none;
 }
 @media (max-width: 640px) {
   .replay-bar .rb-label {
@@ -2659,8 +2666,34 @@ body.duel .pane-layer {
   /* words are enough here; the icons come back on wide screens */
   #ind-btn svg,
   #replay-btn svg,
-  #bt-btn svg,
-  #duel-btn svg {
+  #bt-btn svg {
     display: none;
   }
+}
+
+/* back to the home page, left of the logo */
+.home-btn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  margin-right: -4px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  text-decoration: none;
+}
+.home-btn:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+.home-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }

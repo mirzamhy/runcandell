@@ -3,6 +3,9 @@
  * and the floating style bar for the selected drawing (color, width, line style, text).
  */
 import { CAN, DEFAULT_STYLE, TOOL_LABEL, type Dash, type Drawing, type DrawingLayer, type DrawKind, type DrawStyle, type Magnet, type Tool } from './drawings'
+import { ask } from './shared/ask'
+
+export const askClear = () => ask('Bisa dibatalkan dengan Ctrl+Z.', { title: 'Hapus semua gambar?', ok: 'Hapus semua', danger: true })
 
 const ICON: Record<Tool | 'magnet' | 'delete' | 'clear' | 'copy' | 'undo' | 'redo' | 'eye' | 'eyeoff' | 'lock' | 'unlock' | 'list' | 'gear', string> = {
   undo: '<path d="M7 5L3 9l4 4"/><path d="M3 9h9a5 5 0 0 1 0 10H9"/>',
@@ -252,7 +255,7 @@ export class DrawTools {
       this.eyeBtn,
       this.button('delete', 'Hapus gambar terpilih (Delete)', () => this.layer.removeSelected()),
       this.button('clear', 'Hapus semua gambar', () => {
-        if (this.layer.drawings.length && confirm('Hapus semua gambar di chart?')) this.layer.clear()
+        if (this.layer.drawings.length) void askClear().then((ok) => ok && this.layer.clear())
       }),
     )
   }

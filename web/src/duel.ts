@@ -2,6 +2,7 @@
 import { duelApi, type DecideResult, type Snapshot } from './api'
 import { toast } from './trade'
 import type { Bar, TF } from './types'
+import { ask } from './shared/ask'
 
 const fmtR = (r: number | null | undefined) => (r === null || r === undefined ? '–' : `${r > 0 ? '+' : ''}${r.toFixed(2)}R`)
 const cls = (n: number | null | undefined) => (!n ? '' : n > 0 ? 'pos' : 'neg')
@@ -190,7 +191,7 @@ export class DuelUI {
       }
     }
     if (a === 'send' && p.side) await this.submit(p.side, false)
-    if (a === 'skip' && confirm('Skip ronde ini (0R)?')) await this.submit('skip', false)
+    if (a === 'skip' && (await ask('Ronde ini dihitung 0R.', { title: 'Skip ronde?', ok: 'Skip' }))) await this.submit('skip', false)
     if (a === 'next') await this.startRound(p.code, p.snap.round + 1)
     if (a === 'summary' || a === 'quit') {
       const code = p.code

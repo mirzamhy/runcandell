@@ -19,6 +19,7 @@ import {
   type StrategySpec,
 } from './strategy'
 import type { OptRow, RunReport, WorkerIn, WorkerOut } from './worker'
+import { ask } from '../shared/ask'
 
 type Tab = 'strategy' | 'result' | 'trades' | 'optimize' | 'compare'
 const TABS: [Tab, string][] = [
@@ -294,9 +295,13 @@ export class BacktestUI {
       s[el.dataset.list as (typeof LISTS)[number][0]].splice(+el.dataset.i!, 1)
       return this.changed(true)
     }
-    if (act === 'reset-code' && confirm('Ganti kode dengan contoh awal?')) {
-      s.code = defaultSpec().code
-      return this.changed(true)
+    if (act === 'reset-code') {
+      void ask('Kode yang kamu tulis diganti contoh awal.', { title: 'Ganti kode?', ok: 'Ganti' }).then((ok) => {
+        if (!ok) return
+        s.code = defaultSpec().code
+        this.changed(true)
+      })
+      return
     }
     if (act === 'saveA' && this.report) {
       const r = this.report

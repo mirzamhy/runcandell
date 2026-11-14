@@ -2,6 +2,7 @@
 import { ApiError, api, type BacktestItem, type JournalEntry, type JournalTrade, type ReplayItem, type User } from './api'
 import { formatWall, makeShifter } from './time'
 import { toast } from './trade'
+import { ask } from './shared/ask'
 
 type Tab = 'journal' | 'replays' | 'backtests' | 'account'
 const TABS: [Tab, string][] = [
@@ -332,7 +333,7 @@ export class AccountUI {
           () => toast('Tidak bisa menyalin otomatis. Salin manual.', 'bad'),
         )
       }
-      if (a === 'new-code' && confirm('Buat kode baru? Kode lama langsung tidak berlaku.')) {
+      if (a === 'new-code' && (await ask('Kode lama langsung tidak berlaku.', { title: 'Buat kode baru?', ok: 'Buat kode baru' }))) {
         this.recoveryShown = (await api.newRecovery()).recoveryCode
         await this.render()
       }
@@ -346,7 +347,7 @@ export class AccountUI {
         const entry = this.journal.find((x) => x.id === id)
         if (entry) this.openEntry({ source: entry.source, trade: entry.trade, edit: entry })
       }
-      if (a === 'del-j' && confirm('Hapus entri jurnal ini?')) {
+      if (a === 'del-j' && (await ask('Entri ini hilang permanen.', { title: 'Hapus entri jurnal?', ok: 'Hapus', danger: true }))) {
         await api.deleteJournal(id)
         await this.render()
       }
@@ -355,7 +356,7 @@ export class AccountUI {
         this.o.dialog.close()
         this.o.onLoadReplay({ ...(r.session as object), serverId: r.id, name: r.name })
       }
-      if (a === 'del-replay' && confirm('Hapus sesi ini dari akun?')) {
+      if (a === 'del-replay' && (await ask('Sesi replay ini hilang dari akun.', { title: 'Hapus sesi?', ok: 'Hapus', danger: true }))) {
         await api.deleteReplay(id)
         await this.render()
       }
@@ -364,7 +365,7 @@ export class AccountUI {
         this.o.dialog.close()
         this.o.onUseBacktest(b, a === 'cmp-bt')
       }
-      if (a === 'del-bt' && confirm('Hapus backtest ini?')) {
+      if (a === 'del-bt' && (await ask('Hasil backtest ini hilang dari akun.', { title: 'Hapus backtest?', ok: 'Hapus', danger: true }))) {
         await api.deleteBacktest(id)
         await this.render()
       }

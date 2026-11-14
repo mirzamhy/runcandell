@@ -5,6 +5,9 @@
 import { api, duelApi, statsApi, type DuelDetail, type DuelListItem, type DuelPlayer, type DuelRoundResult, type Stats, type User } from '../api'
 import { mountLogos, setFavicon } from '../shared/brand'
 import { formatWall } from '../time'
+import { EYES_SIGIL } from '../home/mask'
+import '../shared/theme.css'
+import '../shared/shell.css'
 import './duel.css'
 
 mountLogos()
@@ -257,6 +260,18 @@ app.addEventListener('click', async (e) => {
   }
 })
 
+function showMe(u: User) {
+  const box = document.getElementById('me')!
+  box.hidden = false
+  box.querySelector('.avatar')!.innerHTML = EYES_SIGIL
+  document.getElementById('me-name')!.textContent = u.nickname
+  void statsApi
+    .get()
+    .then((s) => (document.getElementById('me-rank')!.textContent = s.me?.rank ? `Peringkat #${s.me.rank}` : 'Tamu'))
+    .catch(() => {})
+  document.getElementById('logout')!.addEventListener('click', () => void api.logout().finally(() => (location.href = '/')))
+}
+
 async function boot() {
   const code = new URLSearchParams(location.search).get('code')
   try {
@@ -267,7 +282,7 @@ async function boot() {
     app.innerHTML = `<section class="dp-gate"><h1>Candle Duel</h1><p>Buat akun tamu dulu (cukup nickname), lalu kamu langsung kembali ke sini${code ? ` untuk duel <code>${esc(code.toUpperCase())}</code>` : ''}.</p><a class="dp-cta" href="/#daftar">Buat akun</a></section>`
     return
   }
-  document.getElementById('me')!.textContent = me.nickname
+  showMe(me)
   try {
     if (code) await renderDuel(code.toUpperCase())
     else await renderLobby()

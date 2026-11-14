@@ -36,7 +36,8 @@ import { SeriesStore, TIMEFRAMES, dataSpan, loadManifest, type Bar, type Manifes
 import { ChartSettingsDialog, alpha, applyLook, loadLook } from './chartsettings'
 import { openMenu, type MenuItem } from './ctxmenu'
 import { DrawingLayer, type Drawing } from './drawings'
-import { DrawTools, magnetLabel } from './drawtools'
+import { askClear, DrawTools, magnetLabel } from './drawtools'
+import { ask } from './shared/ask'
 import { DEFAULT_CONFIG } from './engine/account'
 import { IndicatorManager } from './indicators/manager'
 import type { IndicatorConfig } from './indicators/registry'
@@ -435,13 +436,12 @@ function syncDuelMarkers() {
   duelMarkersApi.setMarkers(out)
 }
 
-const duelBtn = $<HTMLButtonElement>('duel-btn')
 new ResizeObserver(() => chartWrap.style.setProperty('--duel-h', `${duelBarEl.offsetHeight || 44}px`)).observe(duelBarEl)
 
 function setDuelUI(on: boolean) {
   document.body.classList.toggle('duel', on)
   duelBarEl.hidden = !on
-  for (const el of [gotoInput, gotoForm.querySelector('button')!, replayBtn, btBtn, duelBtn]) (el as HTMLButtonElement).disabled = on
+  for (const el of [gotoInput, gotoForm.querySelector('button')!, replayBtn, btBtn]) (el as HTMLButtonElement).disabled = on
 }
 
 const duel = new DuelUI(duelBarEl, {
@@ -970,10 +970,10 @@ function buildReplayControls() {
     if (btOpen()) setBacktest(false)
     if (picking) return setPicking(false)
     const saved = load<ReplaySession | null>(KEY.replay, null)
-    if (saved && confirm('Lanjutkan sesi replay sebelumnya?\n\nOK = lanjutkan, Batal = mulai sesi baru.')) {
-      return void startReplay(saved.cursorTime, saved)
-    }
-    setPicking(true)
+    if (!saved) return setPicking(true)
+    void ask('Posisi, order, dan riwayat sesi terakhir masih tersimpan.', { title: 'Lanjutkan replay?', ok: 'Lanjutkan', cancel: 'Sesi baru' }).then((ok) =>
+      ok ? startReplay(saved.cursorTime, saved) : setPicking(true),
+    )
   })
 
   pickBar.addEventListener('click', (e) => {
@@ -1017,7 +1017,12 @@ function buildReplayControls() {
       stopPlay()
       void stepOnce()
     }
-    if (act === 'restart' && confirm('Ulang dari titik awal? Posisi dan riwayat sesi ini dihapus.')) void startReplay(replay.startTime)
+    if (act === 'restart') {
+      const from = replay.startTime
+      void ask('Posisi dan riwayat sesi ini dihapus.', { title: 'Ulang dari titik awal?', ok: 'Ulang', danger: true }).then((ok) => {
+        if (ok) void startReplay(from)
+      })
+    }
     if (act === 'exit') void exitReplay()
     if (act === 'save') void saveReplayToAccount()
     if (act === 'help') replayHelp.hidden = !replayHelp.hidden
@@ -1120,7 +1125,7 @@ function buildContextMenu() {
       },
     )
     if (drawings.drawings.length) {
-      items.push({ label: 'Hapus semua gambar', danger: true, act: () => confirm('Hapus semua gambar di chart?') && drawings.clear() })
+      items.push({ label: 'Hapus semua gambar', danger: true, act: () => void askClear().then((ok) => ok && drawings.clear()) })
     }
     openMenu(e.clientX, e.clientY, items)
   })
@@ -1195,7 +1200,6 @@ function buildControls() {
   chart.timeScale().subscribeVisibleLogicalRangeChange(onRangeChange)
   buildReplayControls()
   btBtn.addEventListener('click', () => setBacktest(!btOpen()))
-  duelBtn.addEventListener('click', () => duel.open())
 }
 
 if (import.meta.env.DEV) {
