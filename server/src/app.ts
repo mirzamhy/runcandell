@@ -54,9 +54,9 @@ export function createApp(db: DatabaseSync, opt: AppOptions) {
   app.onError((err, c) => {
     if (err instanceof HttpError) return c.json({ error: err.message }, err.status)
     console.error(err)
-    return c.json({ error: 'Kesalahan server.' }, 500)
+    return c.json({ error: 'Server error.' }, 500)
   })
-  app.notFound((c) => c.json({ error: 'Tidak ditemukan.' }, 404))
+  app.notFound((c) => c.json({ error: 'Not found.' }, 404))
 
   // gzip JSON: duel snapshots are ~300 KB raw, ~70 KB compressed
   // (the Vite dev proxy also stalls on uncompressed bodies past ~256 KB)
@@ -64,12 +64,12 @@ export function createApp(db: DatabaseSync, opt: AppOptions) {
 
   // CSRF guard + default body limit (screenshots get their own)
   app.use('/api/*', async (c, next) => {
-    if (c.req.method !== 'GET' && c.req.method !== 'HEAD' && c.req.header('x-rc') !== '1') throw new HttpError(403, 'Header X-RC wajib.')
+    if (c.req.method !== 'GET' && c.req.method !== 'HEAD' && c.req.header('x-rc') !== '1') throw new HttpError(403, 'The X-RC header is required.')
     await next()
     c.header('Cache-Control', 'no-store')
     c.header('X-Content-Type-Options', 'nosniff')
   })
-  const limitJson = bodyLimit({ maxSize: 2 * 1024 * 1024, onError: () => { throw new HttpError(413, 'Data terlalu besar.') } })
+  const limitJson = bodyLimit({ maxSize: 2 * 1024 * 1024, onError: () => { throw new HttpError(413, 'Data too large.') } })
 
   // ---------- auth ----------
 
@@ -82,15 +82,15 @@ export function createApp(db: DatabaseSync, opt: AppOptions) {
   const nickTaken = (n: string) => !!db.prepare('SELECT 1 FROM users WHERE nickname = ?').get(n)
   const checkNick = (v: unknown) => {
     const nickname = str(v, 'Nickname', 20, 3)
-    if (!NICK.test(nickname)) throw new HttpError(400, 'Nickname cuma boleh huruf, angka, dan _ (3–20).')
-    if (nickTaken(nickname)) throw new HttpError(409, 'Nickname sudah dipakai.')
+    if (!NICK.test(nickname)) throw new HttpError(400, 'A nickname may only use letters, numbers and _ (3–20).')
+    if (nickTaken(nickname)) throw new HttpError(409, 'That nickname is taken.')
     return nickname
   }
   /** new accounts per IP per hour; returns the commit step, run once the account exists */
   const signupSlot = (c: Context) => {
     const ip = c.req.header('x-forwarded-for')?.split(',')[0].trim() ?? 'local'
     const recent = (signups.get(ip) ?? []).filter((t) => t > now() - 3600)
-    if (recent.length >= (opt.signupLimit ?? 10)) throw new HttpError(429, 'Terlalu banyak akun baru. Coba lagi nanti.')
+    if (recent.length >= (opt.signupLimit ?? 10)) throw new HttpError(429, 'Too many new accounts. Try again later.')
     return () => signups.set(ip, [...recent, now()])
   }
   /** the signed-in user, if any (for routes that also work signed out) */
@@ -128,7 +128,7 @@ export function createApp(db: DatabaseSync, opt: AppOptions) {
     const nickname = checkNick(body.nickname)
     const email = checkEmail(body.email)
     const password = checkPassword(body.password)
-    if (emailTaken(email)) throw new HttpError(409, 'Email sudah terdaftar. Masuk saja, atau pakai email lain.')
+    if (emailTaken(email)) throw new HttpError(409, 'That email is already registered. Sign in, or use another email.')
     const done = signupSlot(c)
     const hash = await hashPassword(password)
     // the recovery code stays unknown until asked for in the account dialog
@@ -144,7 +144,7 @@ export function createApp(db: DatabaseSync, opt: AppOptions) {
   /** `login` is the email, or the nickname of an account that has a password */
   app.post('/api/auth/login', limitJson, async (c) => {
     const body = await json(c)
-    const login = str(body.login, 'Email atau nickname', 254, 3).toLowerCase()
+    const login = str(body.login, 'Email or nickname', 254, 3).toLowerCase()
     const password = typeof body.password === 'string' ? body.password : ''
     const key = `login:${login}`
     const ip = `ip:${ipOf(c)}`
@@ -157,7 +157,7 @@ export function createApp(db: DatabaseSync, opt: AppOptions) {
     if (!u || !u.password_hash || !ok) {
       brake.miss(key)
       ipBrake.miss(ip)
-      throw new HttpError(401, 'Email/nickname atau password salah.')
+      throw new HttpError(401, 'Wrong email/nickname or password.')
     }
     brake.clear(key)
     startSession(c, u.id)
@@ -175,20 +175,20 @@ export function createApp(db: DatabaseSync, opt: AppOptions) {
    * otherwise a new account, which needs a nickname (answered with `needNickname` first).
    */
   app.post('/api/auth/google', limitJson, async (c) => {
-    if (!opt.google || !jwks) throw new HttpError(503, 'Login Google belum diaktifkan di server.')
+    if (!opt.google || !jwks) throw new HttpError(503, 'Google sign-in is not enabled on the server.')
     const body = await json(c)
     const g = await verifyGoogleToken(str(body.credential, 'Credential', 4096, 20), opt.google.clientId, jwks, now())
     const known = db.prepare('SELECT id, nickname FROM users WHERE google_sub = ?').get(g.sub) as User | undefined
     const me = sessionUser(c)
     if (known) {
-      if (me && me.id !== known.id) throw new HttpError(409, `Akun Google ini sudah dipakai akun ${known.nickname}. Keluar dulu lalu masuk dengan Google.`)
+      if (me && me.id !== known.id) throw new HttpError(409, `This Google account belongs to ${known.nickname}. Sign out first, then sign in with Google.`)
       if (!me) startSession(c, known.id)
       db.prepare('UPDATE users SET email = ? WHERE id = ?').run(g.email, known.id)
       return c.json({ user: known })
     }
     if (me) {
       const linked = db.prepare('SELECT google_sub FROM users WHERE id = ?').get(me.id) as { google_sub: string | null }
-      if (linked.google_sub) throw new HttpError(409, 'Akun ini sudah terhubung ke akun Google lain.')
+      if (linked.google_sub) throw new HttpError(409, 'This account is already linked to another Google account.')
       db.prepare('UPDATE users SET google_sub = ?, email = ? WHERE id = ?').run(g.sub, g.email, me.id)
       return c.json({ user: me, linked: true })
     }
@@ -207,9 +207,9 @@ export function createApp(db: DatabaseSync, opt: AppOptions) {
 
   app.post('/api/auth/recover', limitJson, async (c) => {
     const body = await json(c)
-    const code = str(body.code, 'Kode', 100, 10)
+    const code = str(body.code, 'Code', 100, 10)
     const u = db.prepare('SELECT id, nickname FROM users WHERE recovery_hash = ?').get(sha(code)) as User | undefined
-    if (!u) throw new HttpError(401, 'Kode pemulihan salah.')
+    if (!u) throw new HttpError(401, 'Wrong recovery code.')
     startSession(c, u.id)
     return c.json({ user: { id: u.id, nickname: u.nickname } })
   })
@@ -224,13 +224,13 @@ export function createApp(db: DatabaseSync, opt: AppOptions) {
   // everything below needs a session
   app.use('/api/*', async (c, next) => {
     const t = getCookie(c, COOKIE)
-    if (!t) throw new HttpError(401, 'Belum masuk.')
+    if (!t) throw new HttpError(401, 'Not signed in.')
     const row = db
       .prepare('SELECT u.id, u.nickname, s.last_seen FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?')
       .get(sha(t)) as (User & { last_seen: number }) | undefined
     if (!row || row.last_seen < now() - SESSION_DAYS * 86400) {
       deleteCookie(c, COOKIE, { path: '/' })
-      throw new HttpError(401, 'Sesi habis. Masuk lagi.')
+      throw new HttpError(401, 'Your session expired. Sign in again.')
     }
     if (row.last_seen < now() - 3600) db.prepare('UPDATE sessions SET last_seen = ? WHERE token_hash = ?').run(now(), sha(t))
     c.set('user', { id: row.id, nickname: row.nickname })
@@ -261,7 +261,7 @@ export function createApp(db: DatabaseSync, opt: AppOptions) {
       brake.check(key)
       if (!(await verifyPassword(typeof body.current === 'string' ? body.current : '', row.password_hash))) {
         brake.miss(key)
-        throw new HttpError(401, 'Password sekarang salah.')
+        throw new HttpError(401, 'Your current password is wrong.')
       }
       brake.clear(key)
       db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(await hashPassword(password), u.id)
@@ -270,7 +270,7 @@ export function createApp(db: DatabaseSync, opt: AppOptions) {
       return c.json({ ok: true, email: row.login_email })
     }
     const email = checkEmail(body.email)
-    if (emailTaken(email)) throw new HttpError(409, 'Email sudah dipakai akun lain.')
+    if (emailTaken(email)) throw new HttpError(409, 'That email is used by another account.')
     db.prepare('UPDATE users SET login_email = ?, password_hash = ? WHERE id = ?').run(email, await hashPassword(password), u.id)
     return c.json({ ok: true, email })
   })
@@ -285,9 +285,9 @@ export function createApp(db: DatabaseSync, opt: AppOptions) {
   // ---------- replay sessions ----------
 
   const replayFields = (body: Record<string, unknown>) => {
-    const name = str(body.name, 'Nama', 60, 1)
-    const s = obj(body.session, 'Sesi')
-    const acc = obj(s.account, 'Akun sesi')
+    const name = str(body.name, 'Name', 60, 1)
+    const s = obj(body.session, 'Session')
+    const acc = obj(s.account, 'Session account')
     const history = Array.isArray(acc.history) ? acc.history : []
     return {
       name,
@@ -320,7 +320,7 @@ export function createApp(db: DatabaseSync, opt: AppOptions) {
     const r = db
       .prepare('UPDATE replays SET name = ?, start_time = ?, cursor_time = ?, trades = ?, balance = ?, state_json = ?, updated_at = ? WHERE id = ? AND user_id = ?')
       .run(f.name, f.start, f.cursor, f.trades, f.balance, f.state, now(), idParam(c), c.get('user').id)
-    if (!r.changes) throw new HttpError(404, 'Sesi tidak ditemukan.')
+    if (!r.changes) throw new HttpError(404, 'Session not found.')
     return c.json({ ok: true })
   })
 
@@ -328,7 +328,7 @@ export function createApp(db: DatabaseSync, opt: AppOptions) {
     const row = db.prepare('SELECT id, name, state_json FROM replays WHERE id = ? AND user_id = ?').get(idParam(c), c.get('user').id) as
       | { id: number; name: string; state_json: string }
       | undefined
-    if (!row) throw new HttpError(404, 'Sesi tidak ditemukan.')
+    if (!row) throw new HttpError(404, 'Session not found.')
     return c.json({ id: row.id, name: row.name, session: JSON.parse(row.state_json) })
   })
 
@@ -358,15 +358,15 @@ export function createApp(db: DatabaseSync, opt: AppOptions) {
 
   app.post('/api/backtests', limitJson, async (c) => {
     const b = await json(c)
-    const curve = obj(b.curve, 'Kurva')
-    if (!Array.isArray(curve.t) || !Array.isArray(curve.v) || curve.t.length > 5000) throw new HttpError(400, 'Kurva tidak valid.')
+    const curve = obj(b.curve, 'Curve')
+    if (!Array.isArray(curve.t) || !Array.isArray(curve.v) || curve.t.length > 5000) throw new HttpError(400, 'Invalid curve.')
     const r = db
       .prepare('INSERT INTO backtests (user_id, name, spec_json, metrics_json, curve_json, range_from, range_to, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
       .run(
         c.get('user').id,
-        str(b.name, 'Nama', 80, 1),
-        JSON.stringify(obj(b.spec, 'Strategi')),
-        JSON.stringify(obj(b.metrics, 'Metrik')),
+        str(b.name, 'Name', 80, 1),
+        JSON.stringify(obj(b.spec, 'Strategy')),
+        JSON.stringify(obj(b.metrics, 'Metrics')),
         JSON.stringify({ t: curve.t, v: curve.v }),
         int(b.from, 'from'),
         int(b.to, 'to'),
@@ -401,11 +401,11 @@ export function createApp(db: DatabaseSync, opt: AppOptions) {
 
   const journalFields = (b: Record<string, unknown>) => {
     const tags = Array.isArray(b.tags) ? b.tags : []
-    if (tags.length > 10) throw new HttpError(400, 'Maksimal 10 tag.')
+    if (tags.length > 10) throw new HttpError(400, 'At most 10 tags.')
     return {
       setup: str(b.setup ?? '', 'Setup', 40),
-      emotion: str(b.emotion ?? '', 'Emosi', 30),
-      note: str(b.note ?? '', 'Catatan', 4000),
+      emotion: str(b.emotion ?? '', 'Emotion', 30),
+      note: str(b.note ?? '', 'Note', 4000),
       tags: JSON.stringify(tags.map((t) => str(t, 'Tag', 30, 1))),
     }
   }
@@ -449,16 +449,16 @@ export function createApp(db: DatabaseSync, opt: AppOptions) {
 
   app.post('/api/journal', limitJson, async (c) => {
     const b = await json(c)
-    const source = str(b.source, 'Sumber', 20)
-    if (!SOURCES.has(source)) throw new HttpError(400, 'Sumber tidak valid.')
+    const source = str(b.source, 'Source', 20)
+    if (!SOURCES.has(source)) throw new HttpError(400, 'Invalid source.')
     const f = journalFields(b)
     let trade: string | null = null
     if (b.trade !== undefined && b.trade !== null) {
       const t = obj(b.trade, 'Trade')
-      if (t.side !== 'buy' && t.side !== 'sell') throw new HttpError(400, 'Arah trade tidak valid.')
+      if (t.side !== 'buy' && t.side !== 'sell') throw new HttpError(400, 'Invalid trade side.')
       for (const k of ['entry', 'exit', 'pnl', 'lots', 'openTime', 'closeTime']) int(t[k], k)
       trade = JSON.stringify(t)
-      if (trade.length > 4000) throw new HttpError(413, 'Data trade terlalu besar.')
+      if (trade.length > 4000) throw new HttpError(413, 'Trade data too large.')
     }
     const replayId = b.replayId === undefined || b.replayId === null ? null : int(b.replayId, 'replayId')
     const r = db
@@ -472,7 +472,7 @@ export function createApp(db: DatabaseSync, opt: AppOptions) {
     const r = db
       .prepare('UPDATE journal SET setup = ?, emotion = ?, note = ?, tags_json = ?, updated_at = ? WHERE id = ? AND user_id = ?')
       .run(f.setup, f.emotion, f.note, f.tags, now(), idParam(c), c.get('user').id)
-    if (!r.changes) throw new HttpError(404, 'Jurnal tidak ditemukan.')
+    if (!r.changes) throw new HttpError(404, 'Journal entry not found.')
     return c.json({ ok: true })
   })
 
@@ -482,12 +482,12 @@ export function createApp(db: DatabaseSync, opt: AppOptions) {
   })
 
   const ownsEntry = (c: Context<Env>, id: number) => {
-    if (!db.prepare('SELECT 1 FROM journal WHERE id = ? AND user_id = ?').get(id, c.get('user').id)) throw new HttpError(404, 'Jurnal tidak ditemukan.')
+    if (!db.prepare('SELECT 1 FROM journal WHERE id = ? AND user_id = ?').get(id, c.get('user').id)) throw new HttpError(404, 'Journal entry not found.')
   }
 
   app.put(
     '/api/journal/:id/shot',
-    bodyLimit({ maxSize: MAX_SHOT, onError: () => { throw new HttpError(413, 'Screenshot maksimal 600 KB.') } }),
+    bodyLimit({ maxSize: MAX_SHOT, onError: () => { throw new HttpError(413, 'Screenshots are limited to 600 KB.') } }),
     async (c) => {
       const id = idParam(c)
       ownsEntry(c, id)
@@ -496,7 +496,7 @@ export function createApp(db: DatabaseSync, opt: AppOptions) {
       const isWebp = String.fromCharCode(...data.subarray(0, 4)) === 'RIFF' && String.fromCharCode(...data.subarray(8, 12)) === 'WEBP'
       const isJpeg = data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff
       const mime = isPng ? 'image/png' : isWebp ? 'image/webp' : isJpeg ? 'image/jpeg' : null
-      if (!mime) throw new HttpError(400, 'Screenshot harus PNG, WebP, atau JPEG.')
+      if (!mime) throw new HttpError(400, 'A screenshot must be PNG, WebP or JPEG.')
       db.prepare('INSERT OR REPLACE INTO journal_shots (journal_id, mime, data) VALUES (?, ?, ?)').run(id, mime, data)
       return c.json({ ok: true })
     },
@@ -506,7 +506,7 @@ export function createApp(db: DatabaseSync, opt: AppOptions) {
     const id = idParam(c)
     ownsEntry(c, id)
     const s = db.prepare('SELECT mime, data FROM journal_shots WHERE journal_id = ?').get(id) as { mime: string; data: Uint8Array } | undefined
-    if (!s) throw new HttpError(404, 'Tidak ada screenshot.')
+    if (!s) throw new HttpError(404, 'No screenshot.')
     return c.body(new Uint8Array(s.data), 200, { 'Content-Type': s.mime, 'Cache-Control': 'private, max-age=86400' })
   })
 

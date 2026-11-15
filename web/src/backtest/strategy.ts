@@ -68,35 +68,35 @@ export interface Source {
 const P = (name: string, def: number) => ({ name, def })
 
 export const SOURCES: Record<string, Source> = {
-  close: { label: 'Close', group: 'Harga', params: [] },
-  open: { label: 'Open', group: 'Harga', params: [] },
-  high: { label: 'High', group: 'Harga', params: [] },
-  low: { label: 'Low', group: 'Harga', params: [] },
-  num: { label: 'Angka', group: 'Harga', params: [P('nilai', 50)] },
-  ema: { label: 'EMA', group: 'Rata-rata', params: [P('periode', 20)] },
-  sma: { label: 'SMA', group: 'Rata-rata', params: [P('periode', 50)] },
-  vwap: { label: 'VWAP harian', group: 'Rata-rata', params: [] },
-  bb_upper: { label: 'Bollinger atas', group: 'Band', params: [P('periode', 20), P('stdev', 2)] },
-  bb_mid: { label: 'Bollinger tengah', group: 'Band', params: [P('periode', 20), P('stdev', 2)] },
-  bb_lower: { label: 'Bollinger bawah', group: 'Band', params: [P('periode', 20), P('stdev', 2)] },
-  dc_upper: { label: 'Donchian atas (candle sebelumnya)', group: 'Band', params: [P('periode', 20)] },
-  dc_lower: { label: 'Donchian bawah (candle sebelumnya)', group: 'Band', params: [P('periode', 20)] },
-  st_line: { label: 'Supertrend', group: 'Tren', params: [P('ATR', 10), P('faktor', 3)] },
-  st_dir: { label: 'Supertrend arah (1 naik, -1 turun)', group: 'Tren', params: [P('ATR', 10), P('faktor', 3)] },
-  rsi: { label: 'RSI', group: 'Osilator', params: [P('periode', 14)] },
-  stoch_k: { label: 'Stochastic %K', group: 'Osilator', params: [P('%K', 14), P('smooth', 3), P('%D', 3)] },
-  stoch_d: { label: 'Stochastic %D', group: 'Osilator', params: [P('%K', 14), P('smooth', 3), P('%D', 3)] },
-  macd: { label: 'MACD', group: 'Osilator', params: [P('fast', 12), P('slow', 26), P('signal', 9)] },
-  macd_signal: { label: 'MACD signal', group: 'Osilator', params: [P('fast', 12), P('slow', 26), P('signal', 9)] },
-  macd_hist: { label: 'MACD histogram', group: 'Osilator', params: [P('fast', 12), P('slow', 26), P('signal', 9)] },
-  atr: { label: 'ATR', group: 'Osilator', params: [P('periode', 14)] },
+  close: { label: 'Close', group: 'Price', params: [] },
+  open: { label: 'Open', group: 'Price', params: [] },
+  high: { label: 'High', group: 'Price', params: [] },
+  low: { label: 'Low', group: 'Price', params: [] },
+  num: { label: 'Number', group: 'Price', params: [P('value', 50)] },
+  ema: { label: 'EMA', group: 'Moving averages', params: [P('period', 20)] },
+  sma: { label: 'SMA', group: 'Moving averages', params: [P('period', 50)] },
+  vwap: { label: 'Daily VWAP', group: 'Moving averages', params: [] },
+  bb_upper: { label: 'Bollinger upper', group: 'Bands', params: [P('period', 20), P('stdev', 2)] },
+  bb_mid: { label: 'Bollinger middle', group: 'Bands', params: [P('period', 20), P('stdev', 2)] },
+  bb_lower: { label: 'Bollinger lower', group: 'Bands', params: [P('period', 20), P('stdev', 2)] },
+  dc_upper: { label: 'Donchian upper (previous candles)', group: 'Bands', params: [P('period', 20)] },
+  dc_lower: { label: 'Donchian lower (previous candles)', group: 'Bands', params: [P('period', 20)] },
+  st_line: { label: 'Supertrend', group: 'Trend', params: [P('ATR', 10), P('factor', 3)] },
+  st_dir: { label: 'Supertrend direction (1 up, -1 down)', group: 'Trend', params: [P('ATR', 10), P('factor', 3)] },
+  rsi: { label: 'RSI', group: 'Oscillators', params: [P('period', 14)] },
+  stoch_k: { label: 'Stochastic %K', group: 'Oscillators', params: [P('%K', 14), P('smooth', 3), P('%D', 3)] },
+  stoch_d: { label: 'Stochastic %D', group: 'Oscillators', params: [P('%K', 14), P('smooth', 3), P('%D', 3)] },
+  macd: { label: 'MACD', group: 'Oscillators', params: [P('fast', 12), P('slow', 26), P('signal', 9)] },
+  macd_signal: { label: 'MACD signal', group: 'Oscillators', params: [P('fast', 12), P('slow', 26), P('signal', 9)] },
+  macd_hist: { label: 'MACD histogram', group: 'Oscillators', params: [P('fast', 12), P('slow', 26), P('signal', 9)] },
+  atr: { label: 'ATR', group: 'Oscillators', params: [P('period', 14)] },
 }
 
 export const OPS: Record<Op, string> = {
-  gt: 'di atas',
-  lt: 'di bawah',
-  xup: 'memotong ke atas',
-  xdown: 'memotong ke bawah',
+  gt: 'is above',
+  lt: 'is below',
+  xup: 'crosses above',
+  xdown: 'crosses below',
 }
 
 export const operand = (src: string, p?: number[]): Operand => ({ src, p: p ?? SOURCES[src].params.map((x) => x.def) })
@@ -174,14 +174,14 @@ function compute(d: Data, src: string, p: number[]): Float64Array {
     case 'macd_hist': return ta.macd(c, p[0], p[1], p[2]).hist
     case 'atr': return ta.atr(h, l, c, p[0])
   }
-  throw new Error(`Sumber tidak dikenal: ${src}`)
+  throw new Error(`Unknown source: ${src}`)
 }
 
 export function series(d: Data, o: Operand): Float64Array {
   const key = `${o.src}:${o.p.join(',')}`
   let s = d.cache.get(key)
   if (!s) {
-    for (const x of o.p) if (!Number.isFinite(x)) throw new Error(`Parameter ${SOURCES[o.src]?.label ?? o.src} tidak valid.`)
+    for (const x of o.p) if (!Number.isFinite(x)) throw new Error(`Invalid parameter for ${SOURCES[o.src]?.label ?? o.src}.`)
     s = compute(d, o.src, o.p)
     d.cache.set(key, s)
   }
@@ -235,17 +235,17 @@ export function compileRules(spec: StrategySpec, d: Data): SignalFn {
   }
 }
 
-export const CODE_TEMPLATE = `// Bagian ini jalan sekali di awal.
-// Data (array per candle): open, high, low, close, volume, time (unix detik UTC)
+export const CODE_TEMPLATE = `// This part runs once at the start.
+// Data (one array per candle field): open, high, low, close, volume, time (unix seconds, UTC)
 // ta: sma, ema, rma, rsi, atr, macd, bollinger, stochastic, supertrend, donchian, highest, lowest, vwap
 const fast = ta.ema(close, 20)
 const slow = ta.ema(close, 50)
 const r = ta.rsi(close, 14)
 
-// Dipanggil saat candle i tertutup. Order masuk di open candle berikutnya.
-// Hanya pakai data sampai index i (jangan i + 1), kalau tidak hasilnya curang.
-// Return: 'buy' | 'sell' | 'exit' | { side: 'buy', sl: harga, tp: harga } | null
-// SL/TP yang tidak diisi memakai pengaturan Risiko.
+// Called when candle i closes. Orders fill at the next candle's open.
+// Only use data up to index i (never i + 1), or the result is cheating.
+// Return: 'buy' | 'sell' | 'exit' | { side: 'buy', sl: price, tp: price } | null
+// An SL/TP you leave out comes from the Risk settings.
 return function (i) {
   if (crossUp(fast, slow, i) && r[i] > 50) return 'buy'
   if (crossDown(fast, slow, i) && r[i] < 50) return 'sell'
@@ -260,7 +260,7 @@ export function compileCode(code: string, d: Data): SignalFn {
     `"use strict";\n${code}`,
   )
   const fn = factory(ta, d.open, d.high, d.low, d.close, d.volume, d.time, crossUp, crossDown)
-  if (typeof fn !== 'function') throw new Error('Kode harus diakhiri dengan: return function (i) { ... }')
+  if (typeof fn !== 'function') throw new Error('The code must end with: return function (i) { ... }')
   return (i) => {
     const r = fn(i)
     if (r === null || r === undefined || r === false) return null
@@ -276,7 +276,7 @@ export function compileCode(code: string, d: Data): SignalFn {
       if (r.exit) s.exit = r.exit === true ? 'all' : r.exit
       return s.enter || s.exit ? s : null
     }
-    throw new Error(`Nilai return tidak dikenal di candle ${i}: ${String(r)}`)
+    throw new Error(`Unknown return value at candle ${i}: ${String(r)}`)
   }
 }
 
@@ -324,7 +324,7 @@ export const PRESETS: { name: string; make: () => StrategySpec }[] = [
     }),
   },
   {
-    name: 'RSI 30/70 balik arah',
+    name: 'RSI 30/70 reversal',
     make: () => ({
       ...base(),
       long: [C(operand('rsi'), 'xup', operand('num', [30]))],
@@ -333,7 +333,7 @@ export const PRESETS: { name: string; make: () => StrategySpec }[] = [
     }),
   },
   {
-    name: 'Supertrend ikut tren',
+    name: 'Supertrend trend follow',
     make: () => ({
       ...base(),
       long: [C(operand('st_dir'), 'xup', operand('num', [0]))],
@@ -353,7 +353,7 @@ export const PRESETS: { name: string; make: () => StrategySpec }[] = [
     }),
   },
   {
-    name: 'MACD cross + filter EMA 200',
+    name: 'MACD cross + EMA 200 filter',
     make: () => ({
       ...base(),
       long: [C(operand('macd'), 'xup', operand('macd_signal')), C(operand('close'), 'gt', operand('ema', [200]))],
@@ -388,13 +388,13 @@ export function listParams(spec: StrategySpec): Param[] {
             if (seen.has(id)) return
             seen.add(id)
             const s = SOURCES[o.src]
-            out.push({ id, label: o.src === 'num' ? `Angka ${v}` : `${s.label} ${s.params[j].name} (${v})`, value: v })
+            out.push({ id, label: o.src === 'num' ? `Number ${v}` : `${s.label} ${s.params[j].name} (${v})`, value: v })
           })
   }
-  if (spec.sl.kind !== 'none') out.push({ id: 'sl', label: `SL ${spec.sl.kind === 'atr' ? '× ATR' : 'jarak $'} (${spec.sl.value})`, value: spec.sl.value })
+  if (spec.sl.kind !== 'none') out.push({ id: 'sl', label: `SL ${spec.sl.kind === 'atr' ? '× ATR' : 'distance $'} (${spec.sl.value})`, value: spec.sl.value })
   if (spec.tp.kind !== 'none')
-    out.push({ id: 'tp', label: `TP ${spec.tp.kind === 'rr' ? 'R:R' : spec.tp.kind === 'atr' ? '× ATR' : 'jarak $'} (${spec.tp.value})`, value: spec.tp.value })
-  if (spec.maxBars > 0) out.push({ id: 'maxBars', label: `Tutup setelah N candle (${spec.maxBars})`, value: spec.maxBars })
+    out.push({ id: 'tp', label: `TP ${spec.tp.kind === 'rr' ? 'R:R' : spec.tp.kind === 'atr' ? '× ATR' : 'distance $'} (${spec.tp.value})`, value: spec.tp.value })
+  if (spec.maxBars > 0) out.push({ id: 'maxBars', label: `Close after N candles (${spec.maxBars})`, value: spec.maxBars })
   return out
 }
 
@@ -432,15 +432,15 @@ export const fmtCond = (c: Cond) => `${fmtOperand(c.a)} ${OPS[c.op]} ${fmtOperan
 
 export function describe(spec: StrategySpec): string {
   const parts: string[] = [spec.tf]
-  if (spec.mode === 'code') parts.push('kode JS')
+  if (spec.mode === 'code') parts.push('JS code')
   else {
     if (spec.long.length) parts.push(`BUY: ${spec.long.map(fmtCond).join(' & ')}`)
     if (spec.short.length) parts.push(`SELL: ${spec.short.map(fmtCond).join(' & ')}`)
   }
-  parts.push(spec.sl.kind === 'none' ? 'tanpa SL' : spec.sl.kind === 'atr' ? `SL ${spec.sl.value}×ATR` : `SL $${spec.sl.value}`)
+  parts.push(spec.sl.kind === 'none' ? 'no SL' : spec.sl.kind === 'atr' ? `SL ${spec.sl.value}×ATR` : `SL $${spec.sl.value}`)
   parts.push(
-    spec.tp.kind === 'none' ? 'tanpa TP' : spec.tp.kind === 'rr' ? `TP ${spec.tp.value}R` : spec.tp.kind === 'atr' ? `TP ${spec.tp.value}×ATR` : `TP $${spec.tp.value}`,
+    spec.tp.kind === 'none' ? 'no TP' : spec.tp.kind === 'rr' ? `TP ${spec.tp.value}R` : spec.tp.kind === 'atr' ? `TP ${spec.tp.value}×ATR` : `TP $${spec.tp.value}`,
   )
-  parts.push(spec.sizing.kind === 'risk' ? `risiko ${spec.sizing.value}%` : `${spec.sizing.value} lot`)
+  parts.push(spec.sizing.kind === 'risk' ? `risk ${spec.sizing.value}%` : `${spec.sizing.value} lot`)
   return parts.join(' · ')
 }

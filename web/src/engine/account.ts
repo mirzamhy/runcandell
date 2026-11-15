@@ -174,24 +174,24 @@ export class Account {
   // ---------- validation ----------
 
   private checkLots(lots: number) {
-    if (!(lots >= LOT_STEP) || lots > 100) throw new TradeError('Lot harus 0.01 sampai 100.')
-    if (Math.abs(Math.round(lots / LOT_STEP) * LOT_STEP - lots) > 1e-9) throw new TradeError('Lot kelipatan 0.01.')
+    if (!(lots >= LOT_STEP) || lots > 100) throw new TradeError('Lots must be 0.01 to 100.')
+    if (Math.abs(Math.round(lots / LOT_STEP) * LOT_STEP - lots) > 1e-9) throw new TradeError('Lots must be a multiple of 0.01.')
   }
 
   /** SL/TP must sit on the correct side of the price the position would close at. */
   private checkLevels(side: Side, ref: number, sl: number | null, tp: number | null) {
     if (side === 'buy') {
-      if (sl !== null && sl >= ref) throw new TradeError('SL buy harus di bawah harga.')
-      if (tp !== null && tp <= ref) throw new TradeError('TP buy harus di atas harga.')
+      if (sl !== null && sl >= ref) throw new TradeError('A buy SL must be below the price.')
+      if (tp !== null && tp <= ref) throw new TradeError('A buy TP must be above the price.')
     } else {
-      if (sl !== null && sl <= ref) throw new TradeError('SL sell harus di atas harga.')
-      if (tp !== null && tp >= ref) throw new TradeError('TP sell harus di bawah harga.')
+      if (sl !== null && sl <= ref) throw new TradeError('A sell SL must be above the price.')
+      if (tp !== null && tp >= ref) throw new TradeError('A sell TP must be below the price.')
     }
   }
 
   private needQuote(): Quote {
     const q = this.quote()
-    if (!q) throw new TradeError('Belum ada harga.')
+    if (!q) throw new TradeError('No price yet.')
     return q
   }
 
@@ -202,7 +202,7 @@ export class Account {
     const q = this.needQuote()
     const entry = side === 'buy' ? q.ask : q.bid
     this.checkLevels(side, side === 'buy' ? q.bid : q.ask, sl, tp)
-    if (this.marginOf(lots, entry) > this.freeMargin(q)) throw new TradeError('Margin tidak cukup.')
+    if (this.marginOf(lots, entry) > this.freeMargin(q)) throw new TradeError('Not enough margin.')
     return this.open(side, lots, entry, sl, tp, q.time)
   }
 
@@ -210,12 +210,12 @@ export class Account {
     this.checkLots(lots)
     const q = this.needQuote()
     const now = side === 'buy' ? q.ask : q.bid
-    if (!(price > 0)) throw new TradeError('Harga order tidak valid.')
+    if (!(price > 0)) throw new TradeError('Invalid order price.')
     const below = price < now
-    if (side === 'buy' && type === 'limit' && !below) throw new TradeError('Buy limit harus di bawah Ask.')
-    if (side === 'buy' && type === 'stop' && below) throw new TradeError('Buy stop harus di atas Ask.')
-    if (side === 'sell' && type === 'limit' && below) throw new TradeError('Sell limit harus di atas Bid.')
-    if (side === 'sell' && type === 'stop' && !below) throw new TradeError('Sell stop harus di bawah Bid.')
+    if (side === 'buy' && type === 'limit' && !below) throw new TradeError('A buy limit must be below the Ask.')
+    if (side === 'buy' && type === 'stop' && below) throw new TradeError('A buy stop must be above the Ask.')
+    if (side === 'sell' && type === 'limit' && below) throw new TradeError('A sell limit must be above the Bid.')
+    if (side === 'sell' && type === 'stop' && !below) throw new TradeError('A sell stop must be below the Bid.')
     this.checkLevels(side, price, sl, tp)
     const o: PendingOrder = { id: this.nextId++, side, type, lots, price, sl, tp, createdTime: q.time }
     this.orders.push(o)
@@ -224,7 +224,7 @@ export class Account {
 
   modifyPosition(id: number, sl: number | null, tp: number | null) {
     const p = this.positions.find((x) => x.id === id)
-    if (!p) throw new TradeError('Posisi tidak ditemukan.')
+    if (!p) throw new TradeError('Position not found.')
     const q = this.needQuote()
     this.checkLevels(p.side, p.side === 'buy' ? q.bid : q.ask, sl, tp)
     p.sl = sl
@@ -233,7 +233,7 @@ export class Account {
 
   modifyOrder(id: number, price: number, sl: number | null, tp: number | null) {
     const o = this.orders.find((x) => x.id === id)
-    if (!o) throw new TradeError('Order tidak ditemukan.')
+    if (!o) throw new TradeError('Order not found.')
     const q = this.needQuote()
     const now = o.side === 'buy' ? q.ask : q.bid
     const below = price < now
@@ -242,7 +242,7 @@ export class Account {
       (o.side === 'buy' && o.type === 'stop' && !below) ||
       (o.side === 'sell' && o.type === 'limit' && !below) ||
       (o.side === 'sell' && o.type === 'stop' && below)
-    if (!ok) throw new TradeError('Harga order di sisi yang salah.')
+    if (!ok) throw new TradeError('The order price is on the wrong side.')
     this.checkLevels(o.side, price, sl, tp)
     o.price = price
     o.sl = sl

@@ -20,9 +20,9 @@ export interface Instrument {
 }
 
 export const INSTRUMENTS: Record<string, Instrument> = {
-  XAUUSD: { symbol: 'XAUUSD', label: 'Emas / USD', digits: 2, contract: 100, quote: 'USD', duelScale: 1, lotStep: 0.01 },
+  XAUUSD: { symbol: 'XAUUSD', label: 'Gold / USD', digits: 2, contract: 100, quote: 'USD', duelScale: 1, lotStep: 0.01 },
   EURUSD: { symbol: 'EURUSD', label: 'Euro / USD', digits: 5, contract: 100000, quote: 'USD', duelScale: 3500, lotStep: 0.01 },
-  USDJPY: { symbol: 'USDJPY', label: 'USD / Yen', digits: 3, contract: 100000, quote: 'JPY', duelScale: 27, lotStep: 0.01 },
+  USDJPY: { symbol: 'USDJPY', label: 'USD / Japanese yen', digits: 3, contract: 100000, quote: 'JPY', duelScale: 27, lotStep: 0.01 },
   US100: { symbol: 'US100', label: 'Nasdaq 100', digits: 2, contract: 1, quote: 'USD', duelScale: 0.18, lotStep: 0.1 },
   BTCUSD: { symbol: 'BTCUSD', label: 'Bitcoin / USD', digits: 2, contract: 1, quote: 'USD', duelScale: 0.04, lotStep: 0.01 },
 }

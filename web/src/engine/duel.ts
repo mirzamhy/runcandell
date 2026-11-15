@@ -153,29 +153,29 @@ export function pendingTypeFor(cut: Bar, side: 'buy' | 'sell', price: number): '
 /** Validation message (Indonesian) or null. Prices are real (not normalised). */
 export function checkDecision(d: Decision, cut: Bar, stopMin: number, fmt: (dist: number) => string = (x) => x.toFixed(2)): string | null {
   if (d.side === 'skip') return null
-  if (d.side !== 'buy' && d.side !== 'sell') return 'Pilih buy, sell, atau skip.'
+  if (d.side !== 'buy' && d.side !== 'sell') return 'Choose buy, sell or skip.'
   const type = d.type ?? 'market'
-  if (type !== 'market' && type !== 'limit' && type !== 'stop') return 'Jenis order tidak dikenal.'
-  if (typeof d.sl !== 'number' || !Number.isFinite(d.sl)) return 'SL wajib diisi.'
+  if (type !== 'market' && type !== 'limit' && type !== 'stop') return 'Unknown order type.'
+  if (typeof d.sl !== 'number' || !Number.isFinite(d.sl)) return 'An SL is required.'
   const dir = d.side === 'buy' ? 1 : -1
   let entry = entryOf(cut, d.side)
   if (type === 'market') {
     // the SL must be on the far side of the price the position closes at (Bid for buys, Ask for sells)
     const closeAt = d.side === 'buy' ? cut.close : cut.close + cut.spread
-    if ((closeAt - d.sl) * dir <= 0) return d.side === 'buy' ? 'SL buy harus di bawah harga.' : 'SL sell harus di atas harga.'
+    if ((closeAt - d.sl) * dir <= 0) return d.side === 'buy' ? 'A buy SL must be below the price.' : 'A sell SL must be above the price.'
   } else {
-    if (typeof d.price !== 'number' || !Number.isFinite(d.price) || d.price <= 0) return 'Harga order wajib diisi.'
+    if (typeof d.price !== 'number' || !Number.isFinite(d.price) || d.price <= 0) return 'An order price is required.'
     if (Math.abs(d.price - entry) < 1e-9 || pendingTypeFor(cut, d.side, d.price) !== type) {
-      const where = (type === 'limit') === (d.side === 'buy') ? 'di bawah' : 'di atas'
-      return `${d.side === 'buy' ? 'Buy' : 'Sell'} ${type} harus ${where} harga ${d.side === 'buy' ? 'Ask' : 'Bid'}.`
+      const where = (type === 'limit') === (d.side === 'buy') ? 'below' : 'above'
+      return `A ${d.side} ${type} must be ${where} the ${d.side === 'buy' ? 'Ask' : 'Bid'}.`
     }
     entry = d.price
-    if ((entry - d.sl) * dir <= 0) return d.side === 'buy' ? 'SL buy harus di bawah harga order.' : 'SL sell harus di atas harga order.'
+    if ((entry - d.sl) * dir <= 0) return d.side === 'buy' ? 'A buy SL must be below the order price.' : 'A sell SL must be above the order price.'
   }
-  if (Math.abs(entry - d.sl) < stopMin - 1e-9) return `SL terlalu dekat. Jarak minimal ${fmt(stopMin)}.`
+  if (Math.abs(entry - d.sl) < stopMin - 1e-9) return `SL too close. Minimum distance ${fmt(stopMin)}.`
   if (d.tp !== null && d.tp !== undefined) {
-    if (!Number.isFinite(d.tp)) return 'TP tidak valid.'
-    if ((d.tp - entry) * dir <= 0) return d.side === 'buy' ? 'TP buy harus di atas harga entry.' : 'TP sell harus di bawah harga entry.'
+    if (!Number.isFinite(d.tp)) return 'Invalid TP.'
+    if ((d.tp - entry) * dir <= 0) return d.side === 'buy' ? 'A buy TP must be above the entry price.' : 'A sell TP must be below the entry price.'
   }
   return null
 }

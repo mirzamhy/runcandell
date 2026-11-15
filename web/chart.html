@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="id">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -11,16 +11,16 @@
   </head>
   <body>
     <header class="topbar">
-      <a class="home-btn" href="/" title="Kembali ke halaman awal" aria-label="Kembali ke halaman awal">
+      <a class="home-btn" href="/" title="Back to the home page" aria-label="Back to the home page">
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12 4l-6 6 6 6" /></svg>
       </a>
-      <a class="brand" href="/" title="Ke halaman awal"><span class="logo"></span>duelcandle</a>
+      <a class="brand" href="/" title="Home"><span class="logo"></span>duelcandle</a>
       <select class="symbol" id="symbol" aria-label="Pair"><option>XAUUSD</option></select>
       <div class="tfs" id="tfs" role="group" aria-label="Timeframe"></div>
       <div class="ind-wrap">
         <button type="button" id="ind-btn" aria-haspopup="true" aria-expanded="false">
           <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 15l4-5 3 3 6-8" /></svg>
-          Indikator
+          Indicators
         </button>
         <div class="ind-menu" id="ind-menu" hidden></div>
       </div>
@@ -28,31 +28,31 @@
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 4v12M8 5l9 5-9 5z" /></svg>
         Replay
       </button>
-      <button type="button" id="bt-btn" aria-pressed="false" title="Backtest strategi otomatis">
+      <button type="button" id="bt-btn" aria-pressed="false" title="Backtest an automated strategy">
         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 16h14M5 13l3-4 3 2 4-6" /><circle cx="15" cy="5" r="1.4" /></svg>
         Backtest
       </button>
       <div class="spacer"></div>
       <form class="goto" id="goto">
-        <input type="datetime-local" id="goto-input" aria-label="Lompat ke tanggal" />
-        <button type="submit">Lompat</button>
+        <input type="datetime-local" id="goto-input" aria-label="Go to date" />
+        <button type="submit">Go</button>
       </form>
-      <button type="button" id="latest" title="Ke candle terbaru">Terbaru</button>
-      <select id="zone" aria-label="Zona waktu"></select>
-      <button type="button" id="cs-btn" class="icon-btn" title="Pengaturan chart: warna candle, latar, grid, skala" aria-label="Pengaturan chart">
+      <button type="button" id="latest" title="Go to the latest candle">Latest</button>
+      <select id="zone" aria-label="Time zone"></select>
+      <button type="button" id="cs-btn" class="icon-btn" title="Chart settings: candle colours, background, grid, scale" aria-label="Chart settings">
         <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="2.6" /><path d="M10 2.5v2.2M10 15.3v2.2M2.5 10h2.2M15.3 10h2.2M4.7 4.7l1.6 1.6M13.7 13.7l1.6 1.6M4.7 15.3l1.6-1.6M13.7 6.3l1.6-1.6" /></svg>
       </button>
-      <button type="button" id="acct-btn" class="acct-btn">Masuk</button>
+      <button type="button" id="acct-btn" class="acct-btn">Sign in</button>
     </header>
 
     <main class="workspace">
       <!-- filled by src/drawtools.ts -->
-      <nav class="tools" id="tools" aria-label="Alat gambar"></nav>
+      <nav class="tools" id="tools" aria-label="Drawing tools"></nav>
 
       <section class="chart-wrap">
         <div class="legend-stack">
           <div class="legend" id="legend"></div>
-          <div class="duel-quick" id="duel-quick" role="group" aria-label="Order cepat" hidden></div>
+          <div class="duel-quick" id="duel-quick" role="group" aria-label="Quick order" hidden></div>
           <div class="chips" id="chips"></div>
         </div>
         <div class="chart" id="chart"></div>
@@ -60,38 +60,38 @@
         <div class="pick-dim" id="pick-dim" hidden></div>
         <div class="pick-line" id="pick-line" hidden><span class="pick-tag"></span></div>
         <div class="pick-line pick-mark" id="pick-mark" hidden><span class="pick-tag"></span></div>
-        <div class="pick-bar" id="pick-bar" role="dialog" aria-label="Pilih titik mulai replay" hidden>
+        <div class="pick-bar" id="pick-bar" role="dialog" aria-label="Choose the replay start" hidden>
           <span class="pick-msg" id="pick-msg" aria-live="polite"></span>
           <span class="pick-acts">
-            <button type="button" data-p="random" title="Titik acak (masih bisa digeser)">Acak</button>
-            <button type="button" data-p="cancel" title="Batal (Esc)">Batal</button>
-            <button type="button" data-p="start" class="primary" title="Mulai replay (Enter)" hidden>Mulai replay</button>
+            <button type="button" data-p="random" title="Random point (you can still move it)">Random</button>
+            <button type="button" data-p="cancel" title="Cancel (Esc)">Cancel</button>
+            <button type="button" data-p="start" class="primary" title="Start replay (Enter)" hidden>Start replay</button>
           </span>
         </div>
-        <div class="replay-bar" id="replay-bar" role="toolbar" aria-label="Kontrol replay" hidden>
-          <button type="button" data-r="restart" title="Ulang dari titik awal" aria-label="Ulang dari titik awal">⏮</button>
+        <div class="replay-bar" id="replay-bar" role="toolbar" aria-label="Replay controls" hidden>
+          <button type="button" data-r="restart" title="Restart from the start point" aria-label="Restart from the start point">⏮</button>
           <button type="button" data-r="play" class="play">▶</button>
-          <button type="button" data-r="step" title="Maju 1 candle (Shift+→)" aria-label="Maju 1 candle">⏭ <span class="rb-label">Maju 1</span></button>
-          <select data-r="speed" aria-label="Kecepatan"></select>
+          <button type="button" data-r="step" title="Step 1 candle (Shift+→)" aria-label="Step 1 candle">⏭ <span class="rb-label">Step</span></button>
+          <select data-r="speed" aria-label="Speed"></select>
           <span class="clock" data-r="clock"></span>
-          <label class="hide-date" title="Sembunyikan tanggal"><input type="checkbox" data-r="hide" /> <span>Sembunyikan </span>tanggal</label>
+          <label class="hide-date" title="Hide dates"><input type="checkbox" data-r="hide" /> <span>Hide </span>dates</label>
           <span class="spacer"></span>
-          <button type="button" data-r="help" title="Cara pakai replay" aria-label="Cara pakai replay">?</button>
-          <button type="button" data-r="save" title="Simpan sesi ke akun">Simpan</button>
-          <button type="button" data-r="exit">Keluar replay</button>
+          <button type="button" data-r="help" title="How replay works" aria-label="How replay works">?</button>
+          <button type="button" data-r="save" title="Save the session to your account">Save</button>
+          <button type="button" data-r="exit">Exit replay</button>
         </div>
         <div class="pick-bar" id="price-pick" hidden></div>
         <div class="overlay" id="overlay" hidden></div>
       </section>
       <section class="bt" id="bt" aria-label="Backtest" hidden></section>
       <aside class="trade" id="trade" aria-label="Paper trading" hidden></aside>
-      <aside class="duel-panel" id="duel-panel" aria-label="Order duel" hidden></aside>
+      <aside class="duel-panel" id="duel-panel" aria-label="Duel order" hidden></aside>
     </main>
 
     <footer class="statusbar" id="status"></footer>
     <dialog id="ind-dialog" class="ind-dialog"></dialog>
-    <dialog id="acct-dialog" class="acct-dialog" aria-label="Akun"></dialog>
-    <dialog id="jr-dialog" class="jr-dialog" aria-label="Jurnal trade"></dialog>
+    <dialog id="acct-dialog" class="acct-dialog" aria-label="Account"></dialog>
+    <dialog id="jr-dialog" class="jr-dialog" aria-label="Trade journal"></dialog>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

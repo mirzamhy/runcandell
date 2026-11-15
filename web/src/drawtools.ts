@@ -6,7 +6,7 @@ import { CAN, DEFAULT_STYLE, TOOL_LABEL, type Dash, type Drawing, type DrawingLa
 import { ask } from './shared/ask'
 import { px as fmtPx, pxStep } from './current'
 
-export const askClear = () => ask('Bisa dibatalkan dengan Ctrl+Z.', { title: 'Hapus semua gambar?', ok: 'Hapus semua', danger: true })
+export const askClear = () => ask('You can undo it with Ctrl+Z.', { title: 'Delete all drawings?', ok: 'Delete all', danger: true })
 
 const ICON: Record<Tool | 'magnet' | 'delete' | 'clear' | 'copy' | 'undo' | 'redo' | 'eye' | 'eyeoff' | 'lock' | 'unlock' | 'list' | 'gear', string> = {
   undo: '<path d="M7 5L3 9l4 4"/><path d="M3 9h9a5 5 0 0 1 0 10H9"/>',
@@ -43,16 +43,16 @@ const ICON: Record<Tool | 'magnet' | 'delete' | 'clear' | 'copy' | 'undo' | 'red
 const svg = (k: keyof typeof ICON) => `<svg viewBox="0 0 20 20" aria-hidden="true">${ICON[k]}</svg>`
 
 const GROUPS: { name: string; tools: Tool[] }[] = [
-  { name: 'Kursor', tools: ['cursor'] },
-  { name: 'Garis', tools: ['trend', 'ray', 'extline', 'arrow', 'hline', 'hray', 'vline', 'cross', 'channel'] },
+  { name: 'Cursor', tools: ['cursor'] },
+  { name: 'Lines', tools: ['trend', 'ray', 'extline', 'arrow', 'hline', 'hray', 'vline', 'cross', 'channel'] },
   { name: 'Fibonacci', tools: ['fib', 'fibext'] },
-  { name: 'Bentuk', tools: ['rect', 'ellipse'] },
-  { name: 'Posisi', tools: ['long', 'short'] },
-  { name: 'Ukur', tools: ['range'] },
-  { name: 'Teks', tools: ['text'] },
+  { name: 'Shapes', tools: ['rect', 'ellipse'] },
+  { name: 'Position', tools: ['long', 'short'] },
+  { name: 'Measure', tools: ['range'] },
+  { name: 'Text', tools: ['text'] },
 ]
 const MAGNET_NEXT: Record<Magnet, Magnet> = { off: 'weak', weak: 'strong', strong: 'off' }
-const MAGNET_LABEL: Record<Magnet, string> = { off: 'Magnet mati', weak: 'Magnet lemah', strong: 'Magnet kuat' }
+const MAGNET_LABEL: Record<Magnet, string> = { off: 'Magnet off', weak: 'Weak magnet', strong: 'Strong magnet' }
 const COLORS = ['#4c8dff', '#2ec4b6', '#26a69a', '#f5a524', '#ef5350', '#a78bfa', '#e6e9ef', '#9aa4b2']
 const KEY = { magnet: 'rc.v1.magnet', styles: 'rc.v1.drawStyles', groups: 'rc.v1.toolGroups', hideAll: 'rc.v1.drawHideAll' }
 const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
@@ -60,8 +60,8 @@ const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 const PT_NAMES: Partial<Record<DrawKind, string[]>> = {
   long: ['Entry', 'Target', 'Stop'],
   short: ['Entry', 'Target', 'Stop'],
-  channel: ['Awal', 'Akhir', 'Lebar'],
-  fibext: ['Titik 1', 'Titik 2', 'Titik 3'],
+  channel: ['Start', 'End', 'Width'],
+  fibext: ['Point 1', 'Point 2', 'Point 3'],
 }
 
 export interface DrawToolsOptions {
@@ -128,13 +128,13 @@ export class DrawTools {
     this.bar.className = 'draw-bar'
     this.bar.hidden = true
     this.bar.setAttribute('role', 'toolbar')
-    this.bar.setAttribute('aria-label', 'Gaya gambar')
+    this.bar.setAttribute('aria-label', 'Drawing style')
     chartWrap.append(this.bar)
 
     this.tree = document.createElement('aside')
     this.tree.className = 'obj-tree'
     this.tree.hidden = true
-    this.tree.setAttribute('aria-label', 'Daftar gambar')
+    this.tree.setAttribute('aria-label', 'Drawing list')
     chartWrap.append(this.tree)
     this.tree.addEventListener('click', (e) => this.onTreeClick(e))
 
@@ -221,7 +221,7 @@ export class DrawTools {
         const c = document.createElement('button')
         c.type = 'button'
         c.className = 'tool-caret'
-        c.title = `Pilih alat ${g.name.toLowerCase()}`
+        c.title = `Choose a ${g.name.toLowerCase()} tool`
         c.setAttribute('aria-label', c.title)
         c.addEventListener('click', () => (this.fly.hidden || this.fly.dataset.group !== g.name ? this.openFly(g, wrap) : (this.fly.hidden = true)))
         wrap.append(c)
@@ -243,7 +243,7 @@ export class DrawTools {
       this.syncNav()
       this.renderTree()
     })
-    this.listBtn = this.button('list', 'Daftar gambar: sembunyikan, kunci, hapus satu per satu', () => {
+    this.listBtn = this.button('list', 'Drawing list: hide, lock or delete one by one', () => {
       this.tree.hidden = !this.tree.hidden
       this.renderTree()
       this.syncNav()
@@ -254,8 +254,8 @@ export class DrawTools {
       sep(),
       this.listBtn,
       this.eyeBtn,
-      this.button('delete', 'Hapus gambar terpilih (Delete)', () => this.layer.removeSelected()),
-      this.button('clear', 'Hapus semua gambar', () => {
+      this.button('delete', 'Delete the selected drawing (Delete)', () => this.layer.removeSelected()),
+      this.button('clear', 'Delete all drawings', () => {
         if (this.layer.drawings.length) void askClear().then((ok) => ok && this.layer.clear())
       }),
     )
@@ -306,13 +306,13 @@ export class DrawTools {
     const m = this.layer.magnet
     this.magnetBtn.setAttribute('aria-pressed', String(m !== 'off'))
     this.magnetBtn.dataset.mode = m
-    this.magnetBtn.title = `${MAGNET_LABEL[m]} (klik untuk ganti, tahan Ctrl saat menggambar untuk membalik)`
+    this.magnetBtn.title = `${MAGNET_LABEL[m]} (click to switch; hold Ctrl while drawing to flip it)`
     this.magnetBtn.setAttribute('aria-label', MAGNET_LABEL[m])
     this.undoBtn.disabled = !this.layer.canUndo
     this.redoBtn.disabled = !this.layer.canRedo
     const hid = this.layer.hideAll
     this.eyeBtn.innerHTML = svg(hid ? 'eyeoff' : 'eye')
-    this.eyeBtn.title = hid ? 'Tampilkan semua gambar' : 'Sembunyikan semua gambar'
+    this.eyeBtn.title = hid ? 'Show all drawings' : 'Hide all drawings'
     this.eyeBtn.setAttribute('aria-label', this.eyeBtn.title)
     this.eyeBtn.setAttribute('aria-pressed', String(hid))
     this.listBtn.setAttribute('aria-pressed', String(!this.tree.hidden))
@@ -323,7 +323,7 @@ export class DrawTools {
   private describe(d: Drawing): string {
     const px = (p: number) => fmtPx(p)
     const st = this.layer.styleOf(d)
-    if (d.kind === 'text') return st.text || 'Teks'
+    if (d.kind === 'text') return st.text || 'Text'
     if (st.text) return st.text
     if (d.kind === 'vline') return this.opts.toInput(d.pts[0].t).replace('T', ' ')
     if (d.pts.length === 1) return px(d.pts[0].p)
@@ -338,18 +338,18 @@ export class DrawTools {
       return `<li class="${d.id === this.layer.selected ? 'sel' : ''}${d.hidden ? ' off' : ''}" data-id="${d.id}">
         <i style="color:${this.layer.styleOf(d).color}">${svg(d.kind)}</i>
         <button type="button" class="ot-name" data-ot="select">${TOOL_LABEL[d.kind]}<small>${esc(this.describe(d))}</small>${tfNote}</button>
-        <button type="button" data-ot="hide" title="${d.hidden ? 'Tampilkan' : 'Sembunyikan'}" aria-label="${d.hidden ? 'Tampilkan' : 'Sembunyikan'}">${svg(d.hidden ? 'eyeoff' : 'eye')}</button>
-        <button type="button" data-ot="lock" title="${d.locked ? 'Buka kunci' : 'Kunci'}" aria-label="${d.locked ? 'Buka kunci' : 'Kunci'}" aria-pressed="${!!d.locked}">${svg(d.locked ? 'lock' : 'unlock')}</button>
-        <button type="button" data-ot="delete" title="Hapus" aria-label="Hapus">${svg('delete')}</button>
+        <button type="button" data-ot="hide" title="${d.hidden ? 'Show' : 'Hide'}" aria-label="${d.hidden ? 'Show' : 'Hide'}">${svg(d.hidden ? 'eyeoff' : 'eye')}</button>
+        <button type="button" data-ot="lock" title="${d.locked ? 'Unlock' : 'Lock'}" aria-label="${d.locked ? 'Unlock' : 'Lock'}" aria-pressed="${!!d.locked}">${svg(d.locked ? 'lock' : 'unlock')}</button>
+        <button type="button" data-ot="delete" title="Delete" aria-label="Delete">${svg('delete')}</button>
       </li>`
     }
     this.tree.innerHTML = `
       <header><b>Gambar (${list.length})</b>
-        <button type="button" data-ot="lockall" title="Kunci / buka semua">${svg('lock')}</button>
-        <button type="button" data-ot="close" aria-label="Tutup daftar">✕</button></header>
-      ${this.layer.hideAll ? '<p class="ot-note">Semua gambar sedang disembunyikan (ikon mata di toolbar).</p>' : ''}
-      ${list.length ? `<ul>${list.map(row).join('')}</ul>` : '<p class="ot-note">Belum ada gambar. Pilih alat di toolbar kiri.</p>'}
-      <p class="ot-note">Klik dua kali gambar di chart untuk pengaturan lengkap: koordinat, isi, label, timeframe.</p>`
+        <button type="button" data-ot="lockall" title="Lock / unlock all">${svg('lock')}</button>
+        <button type="button" data-ot="close" aria-label="Close list">✕</button></header>
+      ${this.layer.hideAll ? '<p class="ot-note">All drawings are hidden (eye icon in the toolbar).</p>' : ''}
+      ${list.length ? `<ul>${list.map(row).join('')}</ul>` : '<p class="ot-note">No drawings yet. Pick a tool in the left toolbar.</p>'}
+      <p class="ot-note">Double-click a drawing on the chart for full settings: coordinates, fill, label, timeframes.</p>`
   }
 
   private onTreeClick(e: Event) {
@@ -394,32 +394,32 @@ export class DrawTools {
   private renderDlg(d: Drawing) {
     const st = this.layer.styleOf(d)
     const k = d.kind
-    const names = PT_NAMES[k] ?? d.pts.map((_, i) => `Titik ${i + 1}`)
+    const names = PT_NAMES[k] ?? d.pts.map((_, i) => `Point ${i + 1}`)
     const sel = (key: string, cur: string | number, opts: [string | number, string][]) =>
       `<select data-st="${key}">${opts.map(([v, l]) => `<option value="${v}"${String(v) === String(cur) ? ' selected' : ''}>${l}</option>`).join('')}</select>`
     const row = (label: string, ctl: string) => `<div class="cs-row"><span>${label}</span><div class="cs-ctl">${ctl}</div></div>`
     const style = [
-      row('Warna garis', `<input type="color" data-st="color" value="${st.color}">`),
-      k === 'text' ? '' : row('Tebal', sel('width', st.width, [1, 2, 3, 4].map((w) => [w, `${w}px`]))),
-      k === 'text' ? '' : row('Jenis garis', sel('dash', st.dash, [['solid', 'Penuh'], ['dash', 'Putus-putus'], ['dot', 'Titik-titik']])),
+      row('Line colour', `<input type="color" data-st="color" value="${st.color}">`),
+      k === 'text' ? '' : row('Width', sel('width', st.width, [1, 2, 3, 4].map((w) => [w, `${w}px`]))),
+      k === 'text' ? '' : row('Line style', sel('dash', st.dash, [['solid', 'Solid'], ['dash', 'Dashed'], ['dot', 'Dotted']])),
       CAN.fill(k)
-        ? row('Isi', `<input type="color" data-st="fill" value="${st.fill ?? st.color}"><input type="range" min="0" max="80" data-st="fillAlpha" value="${st.fillAlpha ?? 15}" aria-label="Tebal isi"><output>${st.fillAlpha ?? 15}%</output>`)
+        ? row('Fill', `<input type="color" data-st="fill" value="${st.fill ?? st.color}"><input type="range" min="0" max="80" data-st="fillAlpha" value="${st.fillAlpha ?? 15}" aria-label="Fill opacity"><output>${st.fillAlpha ?? 15}%</output>`)
         : '',
       CAN.extend(k)
-        ? row('Perpanjang', `<label class="cs-null"><input type="checkbox" data-st="extendL"${st.extendL ? ' checked' : ''}> ke kiri</label><label class="cs-null"><input type="checkbox" data-st="extendR"${st.extendR ? ' checked' : ''}> ke kanan</label>`)
+        ? row('Extend', `<label class="cs-null"><input type="checkbox" data-st="extendL"${st.extendL ? ' checked' : ''}> left</label><label class="cs-null"><input type="checkbox" data-st="extendR"${st.extendR ? ' checked' : ''}> right</label>`)
         : '',
     ].join('')
     const text =
       k === 'text'
-        ? `<textarea data-st="text" rows="3">${esc(st.text ?? '')}</textarea>${row('Ukuran teks', sel('fontSize', st.fontSize ?? 10 + st.width * 2, [10, 12, 14, 16, 20, 24, 32].map((v) => [v, `${v}px`])))}`
+        ? `<textarea data-st="text" rows="3">${esc(st.text ?? '')}</textarea>${row('Text size', sel('fontSize', st.fontSize ?? 10 + st.width * 2, [10, 12, 14, 16, 20, 24, 32].map((v) => [v, `${v}px`])))}`
         : CAN.label(k)
-          ? `<input type="text" data-st="text" maxlength="80" placeholder="Contoh: Support kuat, Zona supply" value="${esc(st.text ?? '')}">${row('Ukuran label', sel('fontSize', st.fontSize ?? 12, [10, 12, 14, 16, 20].map((v) => [v, `${v}px`])))}`
+          ? `<input type="text" data-st="text" maxlength="80" placeholder="e.g. Strong support, Supply zone" value="${esc(st.text ?? '')}">${row('Label size', sel('fontSize', st.fontSize ?? 12, [10, 12, 14, 16, 20].map((v) => [v, `${v}px`])))}`
           : ''
     const coords = d.pts
       .map(
-        (p, i) => `<div class="dd-pt"><b>${names[i] ?? `Titik ${i + 1}`}</b>
-          <label>Harga <input type="number" step="${pxStep()}" data-pt="${i}" data-f="p" value="${fmtPx(p.p)}"></label>
-          ${k === 'hline' ? '' : `<label>Waktu <input type="datetime-local" data-pt="${i}" data-f="t" value="${this.opts.toInput(p.t)}"></label>`}</div>`,
+        (p, i) => `<div class="dd-pt"><b>${names[i] ?? `Point ${i + 1}`}</b>
+          <label>Price <input type="number" step="${pxStep()}" data-pt="${i}" data-f="p" value="${fmtPx(p.p)}"></label>
+          ${k === 'hline' ? '' : `<label>Time <input type="datetime-local" data-pt="${i}" data-f="t" value="${this.opts.toInput(p.t)}"></label>`}</div>`,
       )
       .join('')
     const all = !d.tfs
@@ -427,16 +427,16 @@ export class DrawTools {
       .map((tf) => `<label class="cs-null"><input type="checkbox" data-tf="${tf}"${all || d.tfs!.includes(tf) ? ' checked' : ''}> ${tf}</label>`)
       .join('')
     this.dlg.innerHTML = `
-      <header class="cs-head"><b>${TOOL_LABEL[k]}</b><button type="button" data-dd="cancel" aria-label="Tutup">✕</button></header>
+      <header class="cs-head"><b>${TOOL_LABEL[k]}</b><button type="button" data-dd="cancel" aria-label="Close">✕</button></header>
       <div class="dd-body">
         <section><h5>Gaya</h5>${style}</section>
-        ${text ? `<section><h5>${k === 'text' ? 'Teks' : 'Label'}</h5>${text}</section>` : ''}
+        ${text ? `<section><h5>${k === 'text' ? 'Text' : 'Label'}</h5>${text}</section>` : ''}
         <section><h5>Koordinat</h5>${coords}</section>
-        <section><h5>Tampil di timeframe</h5><div class="dd-tfs">${tfs}</div>
-          <label class="cs-null"><input type="checkbox" data-st="locked"${d.locked ? ' checked' : ''}> Kunci posisi (tidak bisa tergeser)</label></section>
+        <section><h5>Show on timeframes</h5><div class="dd-tfs">${tfs}</div>
+          <label class="cs-null"><input type="checkbox" data-st="locked"${d.locked ? ' checked' : ''}> Lock in place (cannot be moved)</label></section>
       </div>
-      <footer class="cs-foot"><button type="button" data-dd="delete" class="danger">Hapus</button><span></span>
-        <button type="button" data-dd="cancel">Batal</button><button type="button" class="primary" data-dd="ok">OK</button></footer>`
+      <footer class="cs-foot"><button type="button" data-dd="delete" class="danger">Delete</button><span></span>
+        <button type="button" data-dd="cancel">Cancel</button><button type="button" class="primary" data-dd="ok">OK</button></footer>`
   }
 
   private dlgRestore() {
@@ -505,19 +505,19 @@ export class DrawTools {
       `<button type="button" data-dash="${v}" aria-pressed="${st.dash === v}" title="${label}"><svg viewBox="0 0 24 8"><path d="M1 4h22" stroke-dasharray="${pattern}"/></svg></button>`
     this.bar.innerHTML = `
       <span class="db-name">${TOOL_LABEL[d.kind]}</span>
-      <span class="db-colors">${COLORS.map((c) => `<button type="button" class="sw" data-color="${c}" style="--c:${c}" aria-pressed="${st.color.toLowerCase() === c}" aria-label="Warna ${c}"></button>`).join('')}
-        <label class="sw custom" title="Warna lain"><input type="color" value="${st.color}" aria-label="Warna lain"></label></span>
+      <span class="db-colors">${COLORS.map((c) => `<button type="button" class="sw" data-color="${c}" style="--c:${c}" aria-pressed="${st.color.toLowerCase() === c}" aria-label="Colour ${c}"></button>`).join('')}
+        <label class="sw custom" title="Other colour"><input type="color" value="${st.color}" aria-label="Other colour"></label></span>
       <span class="db-sep"></span>
-      <span class="db-widths">${[1, 2, 3, 4].map((w) => `<button type="button" data-width="${w}" aria-pressed="${st.width === w}" title="Tebal ${w}px"><i style="height:${w}px"></i></button>`).join('')}</span>
+      <span class="db-widths">${[1, 2, 3, 4].map((w) => `<button type="button" data-width="${w}" aria-pressed="${st.width === w}" title="Width ${w}px"><i style="height:${w}px"></i></button>`).join('')}</span>
       <span class="db-sep"></span>
-      <span class="db-dash">${dash('solid', 'Garis penuh', '')}${dash('dash', 'Putus-putus', '5 3')}${dash('dot', 'Titik-titik', '1.5 2.5')}</span>
-      ${d.kind === 'text' ? `<span class="db-sep"></span><input class="db-text" type="text" maxlength="120" value="${esc(st.text ?? '')}" aria-label="Isi teks">` : ''}
+      <span class="db-dash">${dash('solid', 'Solid', '')}${dash('dash', 'Dashed', '5 3')}${dash('dot', 'Dotted', '1.5 2.5')}</span>
+      ${d.kind === 'text' ? `<span class="db-sep"></span><input class="db-text" type="text" maxlength="120" value="${esc(st.text ?? '')}" aria-label="Text">` : ''}
       ${CAN.label(d.kind) ? `<span class="db-sep"></span><input class="db-text db-label" type="text" maxlength="80" placeholder="+ label" value="${esc(st.text ?? '')}" aria-label="Label">` : ''}
       <span class="db-sep"></span>
-      <button type="button" data-act="lock" title="${d.locked ? 'Buka kunci' : 'Kunci posisi'}" aria-label="Kunci" aria-pressed="${!!d.locked}">${svg(d.locked ? 'lock' : 'unlock')}</button>
-      <button type="button" data-act="settings" title="Pengaturan lengkap (klik dua kali gambar)" aria-label="Pengaturan">${svg('gear')}</button>
+      <button type="button" data-act="lock" title="${d.locked ? 'Unlock' : 'Lock in place'}" aria-label="Lock" aria-pressed="${!!d.locked}">${svg(d.locked ? 'lock' : 'unlock')}</button>
+      <button type="button" data-act="settings" title="Full settings (double-click the drawing)" aria-label="Settings">${svg('gear')}</button>
       <button type="button" data-act="copy" title="Duplikat (Ctrl+D)" aria-label="Duplikat">${svg('copy')}</button>
-      <button type="button" data-act="delete" title="Hapus (Delete)" aria-label="Hapus">${svg('delete')}</button>`
+      <button type="button" data-act="delete" title="Delete (Delete)" aria-label="Delete">${svg('delete')}</button>`
     this.bar.hidden = false
     this.bar.onclick = (e) => {
       const b = (e.target as HTMLElement).closest<HTMLElement>('button')

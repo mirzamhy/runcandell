@@ -42,7 +42,7 @@ const loadGis = () =>
     s.onload = () => resolve()
     s.onerror = () => {
       script = null
-      reject(new Error('Tombol Google gagal dimuat.'))
+      reject(new Error('The Google button failed to load.'))
     }
     document.head.append(s)
   }))
@@ -76,7 +76,7 @@ export async function mountGoogleButton(el: HTMLElement, onCredential: (credenti
     size: 'large',
     text,
     shape: 'pill',
-    locale: 'id',
+    locale: 'en',
     // hidden slot (width 0): a width that fits a phone card
     width: Math.min(400, Math.max(200, Math.round(el.clientWidth || 280))),
     click_listener: () => (target = onCredential),

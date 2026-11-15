@@ -60,16 +60,16 @@ async function prepare(spec: StrategySpec, id: number): Promise<Prepared> {
   const span = dataSpan(m)
   const from = Math.max(spec.from ?? span.from, span.from)
   const to = Math.min(spec.to ?? Infinity, span.to + 60)
-  if (!(to > from)) throw new Error('Rentang tanggal kosong.')
+  if (!(to > from)) throw new Error('The date range is empty.')
   const key = `${symbol}|${spec.tf}|${from}|${to}`
   if (cached?.key === key) return cached.p
 
-  post({ id, kind: 'progress', text: 'Memuat data…' })
+  post({ id, kind: 'progress', text: 'Loading data…' })
   const tfSec = TF_SECONDS[spec.tf]
   // weekends and holidays: load a bit more calendar time than WARMUP bars
   const bars = await loadRange(m, spec.tf, from - WARMUP * tfSec * 1.6, to)
   const start = bars.findIndex((b) => b.time >= from)
-  if (start === -1) throw new Error('Tidak ada candle di rentang ini.')
+  if (start === -1) throw new Error('No candles in this range.')
   const m1 = spec.tf === 'M1' ? null : await loadRange(m, 'M1', from, to + tfSec)
   const data = toData(bars)
   const p: Prepared = { bars, m1, data, atr: series(data, operand('atr', [14])), start, tfSec }
@@ -87,14 +87,14 @@ function runOne(p: Prepared, spec: StrategySpec, zone: string, start: number, en
   try {
     signal = compile(spec, p.data)
   } catch (e) {
-    throw new Error(spec.mode === 'code' ? `Kode error: ${(e as Error).message}` : (e as Error).message)
+    throw new Error(spec.mode === 'code' ? `Code error: ${(e as Error).message}` : (e as Error).message)
   }
   const wrapped = spec.mode === 'code'
     ? (i: number) => {
         try {
           return signal(i)
         } catch (e) {
-          throw new Error(`Kode error di candle ${i}: ${(e as Error).message}`)
+          throw new Error(`Code error at candle ${i}: ${(e as Error).message}`)
         }
       }
     : signal
@@ -141,7 +141,7 @@ async function handle(msg: WorkerIn) {
     rows.push({ index: i, is: metrics(r.trades, r.eqTime, r.eqValue, s.balance), oos: null })
     if (performance.now() - lastPost > 100) {
       lastPost = performance.now()
-      post({ id, kind: 'progress', text: `Optimasi ${i + 1}/${msg.specs.length}` })
+      post({ id, kind: 'progress', text: `Optimising ${i + 1}/${msg.specs.length}` })
     }
   }
   rows.sort((a, b) => b.is.net - a.is.net)

@@ -22,7 +22,7 @@ export function ask(message: string, o: AskOptions = {}): Promise<boolean> {
       ${o.title ? `<h3>${esc(o.title)}</h3>` : ''}
       <p>${esc(message)}</p>
       <div class="ask-acts">
-        <button type="submit" value="no">${esc(o.cancel ?? 'Batal')}</button>
+        <button type="submit" value="no">${esc(o.cancel ?? 'Cancel')}</button>
         <button type="submit" value="yes" class="${o.danger ? 'danger' : 'primary'}" autofocus>${esc(o.ok ?? 'Ya')}</button>
       </div>
     </form>`

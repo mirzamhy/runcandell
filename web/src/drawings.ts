@@ -92,24 +92,24 @@ export interface Axis {
 }
 
 export const TOOL_LABEL: Record<Tool, string> = {
-  cursor: 'Kursor',
+  cursor: 'Cursor',
   trend: 'Trendline',
   ray: 'Ray',
-  extline: 'Garis diperpanjang',
-  arrow: 'Panah',
-  hline: 'Garis horizontal',
-  hray: 'Ray horizontal',
-  vline: 'Garis vertikal',
-  cross: 'Garis silang',
-  channel: 'Channel paralel',
+  extline: 'Extended line',
+  arrow: 'Arrow',
+  hline: 'Horizontal line',
+  hray: 'Horizontal ray',
+  vline: 'Vertical line',
+  cross: 'Cross line',
+  channel: 'Parallel channel',
   fib: 'Fib retracement',
   fibext: 'Fib extension',
-  rect: 'Kotak / zona',
-  ellipse: 'Elips',
-  long: 'Posisi long',
-  short: 'Posisi short',
-  range: 'Ukur harga & waktu',
-  text: 'Teks',
+  rect: 'Rectangle / zone',
+  ellipse: 'Ellipse',
+  long: 'Long position',
+  short: 'Short position',
+  range: 'Measure price & time',
+  text: 'Text',
 }
 
 /** clicks needed to place each tool */
@@ -134,7 +134,7 @@ export const DEFAULT_STYLE: Record<DrawKind, DrawStyle> = {
   long: { color: '#26a69a', width: 1, dash: 'solid' },
   short: { color: '#ef5350', width: 1, dash: 'solid' },
   range: { color: '#4c8dff', width: 1, dash: 'solid' },
-  text: { color: '#e6e9ef', width: 2, dash: 'solid', text: 'Teks' },
+  text: { color: '#e6e9ef', width: 2, dash: 'solid', text: 'Text' },
 }
 const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1]
 const FIBEXT_LEVELS = [0, 0.382, 0.618, 1, 1.272, 1.618, 2, 2.618]
@@ -989,7 +989,7 @@ export class DrawingLayer implements ISeriesPrimitive<Time> {
         const dp = d.pts[1].p - d.pts[0].p
         const pct = (dp / d.pts[0].p) * 100
         const bars = Math.round(this.axis.toLogical(d.pts[1].t) - this.axis.toLogical(d.pts[0].t))
-        const text = `${dp >= 0 ? '+' : ''}${px(dp)} (${pct.toFixed(2)}%) · ${bars} bar · ${fmtSpan(Math.abs(d.pts[1].t - d.pts[0].t))}`
+        const text = `${dp >= 0 ? '+' : ''}${px(dp)} (${pct.toFixed(2)}%) · ${bars} bars · ${fmtSpan(Math.abs(d.pts[1].t - d.pts[0].t))}`
         const w = ctx.measureText(text).width + 10
         label(text, mx - w / 2, Math.max(a.y, b.y) + 16, up ? '#4c8dff' : '#ef5350', '#fff')
         break
@@ -1096,8 +1096,8 @@ function fmtSpan(sec: number): string {
   const d = Math.floor(sec / 86400)
   const h = Math.floor((sec % 86400) / 3600)
   const m = Math.round((sec % 3600) / 60)
-  if (d) return `${d}h ${h}j`
-  if (h) return `${h}j ${m}m`
+  if (d) return `${d}d ${h}h`
+  if (h) return `${h}h ${m}m`
   return `${m}m`
 }
 

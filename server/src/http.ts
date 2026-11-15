@@ -11,22 +11,22 @@ export class HttpError extends Error {
 // ---------- input validation ----------
 
 export function str(v: unknown, field: string, max: number, min = 0): string {
-  if (typeof v !== 'string') throw new HttpError(400, `${field} harus teks.`)
+  if (typeof v !== 'string') throw new HttpError(400, `${field} must be text.`)
   const s = v.trim()
-  if (s.length < min || s.length > max) throw new HttpError(400, `${field} harus ${min}–${max} karakter.`)
+  if (s.length < min || s.length > max) throw new HttpError(400, `${field} must be ${min}–${max} characters.`)
   return s
 }
 export function int(v: unknown, field: string): number {
-  if (typeof v !== 'number' || !Number.isFinite(v)) throw new HttpError(400, `${field} harus angka.`)
+  if (typeof v !== 'number' || !Number.isFinite(v)) throw new HttpError(400, `${field} must be a number.`)
   return Math.round(v)
 }
 export function obj(v: unknown, field: string): Record<string, unknown> {
-  if (!v || typeof v !== 'object' || Array.isArray(v)) throw new HttpError(400, `${field} tidak valid.`)
+  if (!v || typeof v !== 'object' || Array.isArray(v)) throw new HttpError(400, `Invalid ${field.toLowerCase()}.`)
   return v as Record<string, unknown>
 }
 export function idParam(c: Context): number {
   const id = Number(c.req.param('id'))
-  if (!Number.isInteger(id) || id <= 0) throw new HttpError(404, 'Tidak ditemukan.')
+  if (!Number.isInteger(id) || id <= 0) throw new HttpError(404, 'Not found.')
   return id
 }
 export async function json(c: Context): Promise<Record<string, unknown>> {
@@ -34,7 +34,7 @@ export async function json(c: Context): Promise<Record<string, unknown>> {
     return obj(await c.req.json(), 'Body')
   } catch (e) {
     if (e instanceof HttpError) throw e
-    throw new HttpError(400, 'Body harus JSON.')
+    throw new HttpError(400, 'The body must be JSON.')
   }
 }
 

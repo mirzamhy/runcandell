@@ -73,20 +73,20 @@ interface DecisionRow {
 }
 
 const pick = <T extends readonly unknown[]>(v: unknown, allowed: T, field: string): T[number] => {
-  if (!allowed.includes(v)) throw new HttpError(400, `${field} tidak valid.`)
+  if (!allowed.includes(v)) throw new HttpError(400, `Invalid ${field.toLowerCase()}.`)
   return v as T[number]
 }
 
 export function mountDuels(app: Hono<Env>, db: DatabaseSync, source: MarketSource | null, now: () => number) {
   const needSource = (): MarketSource => {
-    if (!source) throw new HttpError(503, 'Data candle belum tersedia di server.')
+    if (!source) throw new HttpError(503, 'Candle data is not available on the server yet.')
     return source
   }
   const needMarket = (symbol: string): MarketData => needSource().of(symbol)
 
   const duelByCode = (code: string): DuelRow => {
     const d = db.prepare('SELECT * FROM duels WHERE code = ?').get(code.toUpperCase()) as DuelRow | undefined
-    if (!d) throw new HttpError(404, 'Duel tidak ditemukan.')
+    if (!d) throw new HttpError(404, 'Duel not found.')
     return d
   }
   const players = (duelId: number) =>
@@ -96,7 +96,7 @@ export function mountDuels(app: Hono<Env>, db: DatabaseSync, source: MarketSourc
   const isMember = (duelId: number, userId: number) => !!db.prepare('SELECT 1 FROM duel_players WHERE duel_id = ? AND user_id = ?').get(duelId, userId)
   const roundOf = (duelId: number, n: number) => {
     const r = db.prepare('SELECT round_no, cut_time, k, symbol FROM duel_rounds WHERE duel_id = ? AND round_no = ?').get(duelId, n) as RoundRow | undefined
-    if (!r) throw new HttpError(404, 'Ronde tidak ditemukan.')
+    if (!r) throw new HttpError(404, 'Round not found.')
     return r
   }
   const decisions = (duelId: number, userId?: number) =>
@@ -158,14 +158,14 @@ export function mountDuels(app: Hono<Env>, db: DatabaseSync, source: MarketSourc
       if (out.some((x) => x.symbol === symbol && Math.abs(x.cut - cut) < DAY)) continue
       out.push({ symbol, cut, k: Math.round((0.7 + randomInt(0, 701) / 1000) * 1000) / 1000 })
     }
-    if (out.length < count) throw new HttpError(503, 'Gagal memilih titik potong. Coba lagi.')
+    if (out.length < count) throw new HttpError(503, 'Could not pick chart slices. Try again.')
     return out
   }
 
   async function cutContext(m: MarketData, r: RoundRow) {
     const m1 = await m.bars('M1', r.cut_time - 5 * DAY, r.cut_time + 1)
     const i = floorIdx(m1, r.cut_time)
-    if (i < 0 || m1[i].time !== r.cut_time) throw new HttpError(503, 'Candle titik potong tidak ditemukan.')
+    if (i < 0 || m1[i].time !== r.cut_time) throw new HttpError(503, 'The slice candle was not found.')
     // every pair moves on screen about like gold: k x the instrument's scale
     return { m1, cut: m1[i], norm: makeNorm(m1[i], r.k * instrument(r.symbol).duelScale) }
   }
@@ -204,11 +204,11 @@ export function mountDuels(app: Hono<Env>, db: DatabaseSync, source: MarketSourc
   app.post('/api/duels', async (c) => {
     const b = await json(c)
     const mode = pick(b.mode, ['solo', 'async'] as const, 'Mode')
-    const rounds = pick(b.rounds, [1, 3, 5, 7, 10] as const, 'Jumlah ronde')
+    const rounds = pick(b.rounds, [1, 3, 5, 7, 10] as const, 'Round count')
     // analysis modes: Kilat 60 s, Normal 180 s, Mendalam 600 s (older values still accepted)
-    const analysisSec = pick(b.analysisSec, [30, 60, 90, 120, 180, 300, 600] as const, 'Waktu analisa')
+    const analysisSec = pick(b.analysisSec, [30, 60, 90, 120, 180, 300, 600] as const, 'Analysis time')
     // the result always runs one day after the decision, the same for everyone
-    const runMinutes = b.runMinutes === undefined ? 1440 : pick(b.runMinutes, [30, 60, 90, 120, 240, 1440] as const, 'Jendela run')
+    const runMinutes = b.runMinutes === undefined ? 1440 : pick(b.runMinutes, [30, 60, 90, 120, 240, 1440] as const, 'Run window')
     const hardcore = b.hardcore === true
     const src = needSource()
     const available = await src.symbols()
@@ -299,25 +299,25 @@ export function mountDuels(app: Hono<Env>, db: DatabaseSync, source: MarketSourc
     const user = c.get('user')
     const d = duelByCode(c.req.param('code'))
     if (isMember(d.id, user.id)) return c.json({ ok: true })
-    if (d.mode !== 'async' || players(d.id).length >= 2) throw new HttpError(409, 'Duel sudah penuh.')
+    if (d.mode !== 'async' || players(d.id).length >= 2) throw new HttpError(409, 'This duel is full.')
     db.prepare('INSERT INTO duel_players (duel_id, user_id, joined_at) VALUES (?, ?, ?)').run(d.id, user.id, now())
     return c.json({ ok: true })
   })
 
   const roundParam = (c: Context) => {
     const n = Number(c.req.param('n'))
-    if (!Number.isInteger(n) || n < 1) throw new HttpError(404, 'Ronde tidak ditemukan.')
+    if (!Number.isInteger(n) || n < 1) throw new HttpError(404, 'Round not found.')
     return n
   }
 
   app.post('/api/duels/:code/rounds/:n/start', async (c) => {
     const user = c.get('user')
     const d = duelByCode(c.req.param('code'))
-    if (!isMember(d.id, user.id)) throw new HttpError(403, 'Kamu bukan peserta duel ini.')
+    if (!isMember(d.id, user.id)) throw new HttpError(403, 'You are not a player in this duel.')
     const n = roundParam(c)
     sweep(d, user.id)
     const next = currentRound(d, user.id)
-    if (next !== n) throw new HttpError(409, next === null ? 'Duel sudah selesai.' : `Sekarang ronde ${next}.`)
+    if (next !== n) throw new HttpError(409, next === null ? 'The duel is finished.' : `Round ${next} is next.`)
     const r = roundOf(d.id, n)
     const m = needMarket(r.symbol)
     let row = db.prepare('SELECT * FROM duel_decisions WHERE duel_id = ? AND round_no = ? AND user_id = ?').get(d.id, n, user.id) as DecisionRow | undefined
@@ -348,10 +348,10 @@ export function mountDuels(app: Hono<Env>, db: DatabaseSync, source: MarketSourc
   app.post('/api/duels/:code/rounds/:n/decide', async (c) => {
     const user = c.get('user')
     const d = duelByCode(c.req.param('code'))
-    if (!isMember(d.id, user.id)) throw new HttpError(403, 'Kamu bukan peserta duel ini.')
+    if (!isMember(d.id, user.id)) throw new HttpError(403, 'You are not a player in this duel.')
     const n = roundParam(c)
     const row = db.prepare('SELECT * FROM duel_decisions WHERE duel_id = ? AND round_no = ? AND user_id = ?').get(d.id, n, user.id) as DecisionRow | undefined
-    if (!row) throw new HttpError(409, 'Ronde belum dimulai.')
+    if (!row) throw new HttpError(409, 'The round has not started.')
     const r = roundOf(d.id, n)
     const m = needMarket(r.symbol)
     const { m1, cut, norm } = await cutContext(m, r)
@@ -361,14 +361,14 @@ export function mountDuels(app: Hono<Env>, db: DatabaseSync, source: MarketSourc
     if (row.side !== null) outcome = rowOutcome(row)
     else {
       const b = await json(c)
-      const side = pick(b.side, ['buy', 'sell', 'skip'] as const, 'Keputusan')
+      const side = pick(b.side, ['buy', 'sell', 'skip'] as const, 'Decision')
       const late = now() > row.sent_at + d.analysis_sec + GRACE
       if (late) {
         outcome = SKIP
         timeout = true
       } else {
         const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? realPrice(norm, v) : null)
-        const type = b.type === undefined ? 'market' : pick(b.type, ['market', 'limit', 'stop'] as const, 'Jenis order')
+        const type = b.type === undefined ? 'market' : pick(b.type, ['market', 'limit', 'stop'] as const, 'Order type')
         const dec: Decision = { side, type, price: type === 'market' ? null : num(b.price), sl: num(b.sl), tp: b.tp === null || b.tp === undefined ? null : num(b.tp) }
         const stop = minStop(m1.slice(0, floorIdx(m1, r.cut_time) + 1))
         const err = checkDecision(dec, cut, stop, (x) => (x * norm.k).toFixed(2))

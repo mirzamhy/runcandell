@@ -157,9 +157,9 @@ export class IndicatorManager {
     el.innerHTML =
       `<span class="chip-name">${def.label(cfg)}</span><span class="chip-vals"></span>` +
       (def.params.length || def.colors.length
-        ? `<button type="button" class="chip-btn" data-act="edit" title="Pengaturan" aria-label="Pengaturan ${def.label(cfg)}">${ICON_GEAR}</button>`
+        ? `<button type="button" class="chip-btn" data-act="edit" title="Settings" aria-label="Settings for ${def.label(cfg)}">${ICON_GEAR}</button>`
         : '') +
-      `<button type="button" class="chip-btn" data-act="remove" title="Hapus" aria-label="Hapus ${def.label(cfg)}">${ICON_X}</button>`
+      `<button type="button" class="chip-btn" data-act="remove" title="Remove" aria-label="Remove ${def.label(cfg)}">${ICON_X}</button>`
     el.addEventListener('click', (e) => {
       const act = (e.target as HTMLElement).closest<HTMLElement>('[data-act]')?.dataset.act
       if (act === 'remove') this.remove(cfg.id)
@@ -179,7 +179,7 @@ export class IndicatorManager {
       t.type = 'button'
       t.className = 'chips-toggle'
       t.setAttribute('aria-expanded', String(!this.collapsed))
-      t.textContent = this.collapsed ? `▸ ${overlays.length} indikator` : '▾ sembunyikan'
+      t.textContent = this.collapsed ? `▸ ${overlays.length} indicators` : '▾ hide'
       t.addEventListener('click', () => {
         this.collapsed = !this.collapsed
         this.onCollapse(this.collapsed)
@@ -243,8 +243,8 @@ export class IndicatorManager {
 
   buildMenu(menu: HTMLElement) {
     const groups: [string, IndicatorDef[]][] = [
-      ['Di chart', INDICATORS.filter((d) => d.place === 'overlay')],
-      ['Panel bawah', INDICATORS.filter((d) => d.place === 'pane')],
+      ['On the chart', INDICATORS.filter((d) => d.place === 'overlay')],
+      ['Lower panel', INDICATORS.filter((d) => d.place === 'pane')],
     ]
     const render = () => {
       menu.replaceChildren()
@@ -259,7 +259,7 @@ export class IndicatorManager {
           b.className = 'menu-item'
           b.textContent = def.name
           b.disabled = !this.canAdd(def)
-          if (b.disabled) b.title = 'Sudah ada di chart'
+          if (b.disabled) b.title = 'Already on the chart'
           b.addEventListener('click', () => {
             this.add(def.type)
             render()
@@ -294,8 +294,8 @@ export class IndicatorManager {
       <div class="form-actions">
         <button type="button" data-act="reset">Default</button>
         <span class="spacer"></span>
-        <button type="button" data-act="cancel">Batal</button>
-        <button type="submit" class="primary">Simpan</button>
+        <button type="button" data-act="cancel">Cancel</button>
+        <button type="submit" class="primary">Save</button>
       </div>
     </form>`
     const form = d.querySelector('form')!

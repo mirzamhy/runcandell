@@ -38,16 +38,16 @@ export const dummyHash = () => (dummy ??= hashPassword(randomBytes(12).toString(
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 export function checkEmail(v: unknown): string {
-  if (typeof v !== 'string') throw new HttpError(400, 'Email harus diisi.')
+  if (typeof v !== 'string') throw new HttpError(400, 'Email is required.')
   const email = v.trim().toLowerCase()
-  if (email.length > 254 || !EMAIL.test(email)) throw new HttpError(400, 'Format email tidak valid.')
+  if (email.length > 254 || !EMAIL.test(email)) throw new HttpError(400, 'Invalid email address.')
   return email
 }
 
 export function checkPassword(v: unknown): string {
-  if (typeof v !== 'string') throw new HttpError(400, 'Password harus diisi.')
-  if (v.length < 8) throw new HttpError(400, 'Password minimal 8 karakter.')
-  if (v.length > 200) throw new HttpError(400, 'Password maksimal 200 karakter.')
+  if (typeof v !== 'string') throw new HttpError(400, 'Password is required.')
+  if (v.length < 8) throw new HttpError(400, 'The password needs at least 8 characters.')
+  if (v.length > 200) throw new HttpError(400, 'The password can have at most 200 characters.')
   return v
 }
 
@@ -60,7 +60,7 @@ export function loginBrake(now: () => number, max = 8, windowSec = 15 * 60) {
   const recent = (k: string) => (misses.get(k) ?? []).filter((t) => t > now() - windowSec)
   return {
     check(...keys: string[]) {
-      for (const k of keys) if (recent(k).length >= max) throw new HttpError(429, 'Terlalu banyak percobaan gagal. Coba lagi 15 menit lagi.')
+      for (const k of keys) if (recent(k).length >= max) throw new HttpError(429, 'Too many failed attempts. Try again in 15 minutes.')
     },
     miss(...keys: string[]) {
       for (const k of keys) misses.set(k, [...recent(k), now()])

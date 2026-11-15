@@ -29,7 +29,7 @@ export function googleJwks(): JwksSource {
     // a forced refetch at most once a minute: made-up key ids must not turn into a flood of requests to Google
     if (Date.now() < until && (!fresh || Date.now() - fetched < 60_000)) return keys
     const res = await fetch(CERTS)
-    if (!res.ok) throw new HttpError(503, 'Gagal menghubungi Google. Coba lagi.')
+    if (!res.ok) throw new HttpError(503, 'Could not reach Google. Try again.')
     keys = ((await res.json()) as { keys: Jwk[] }).keys
     fetched = Date.now()
     const age = Number(/max-age=(\d+)/.exec(res.headers.get('cache-control') ?? '')?.[1] ?? 3600)
@@ -41,7 +41,7 @@ export function googleJwks(): JwksSource {
 const part = (s: string) => JSON.parse(Buffer.from(s, 'base64url').toString('utf8'))
 
 export async function verifyGoogleToken(credential: string, clientId: string, jwks: JwksSource, now: number): Promise<GoogleClaims> {
-  const bad = () => new HttpError(401, 'Login Google tidak valid. Coba lagi.')
+  const bad = () => new HttpError(401, 'Invalid Google sign-in. Try again.')
   const pieces = credential.split('.')
   if (pieces.length !== 3) throw bad()
   let header: { alg?: string; kid?: string }
@@ -59,7 +59,7 @@ export async function verifyGoogleToken(credential: string, clientId: string, jw
   if (!ok) throw bad()
   if (!ISSUERS.has(claims.iss as string) || claims.aud !== clientId) throw bad()
   // a minute of clock slack either way
-  if (typeof claims.exp !== 'number' || claims.exp < now - 60) throw new HttpError(401, 'Login Google kedaluwarsa. Coba lagi.')
+  if (typeof claims.exp !== 'number' || claims.exp < now - 60) throw new HttpError(401, 'The Google sign-in expired. Try again.')
   if (typeof claims.iat === 'number' && claims.iat > now + 60) throw bad()
   if (typeof claims.sub !== 'string' || !claims.sub) throw bad()
   const email = typeof claims.email === 'string' && claims.email_verified === true ? claims.email : null

@@ -32,10 +32,10 @@ eq('date moved to ~2000', new Date(nb.time * 1000).getUTCFullYear() <= 2000, tru
 // 3. decision validation (real prices); entry buy = ask 2000.2
 const c = bar(0, 2000, 2000, 2000, 2000, 0.2)
 eq('skip ok', checkDecision({ side: 'skip' }, c, 1), null)
-eq('sl required', checkDecision({ side: 'buy' }, c, 1), 'SL wajib diisi.')
-eq('sl wrong side', checkDecision({ side: 'buy', sl: 2001 }, c, 1), 'SL buy harus di bawah harga.')
-eq('sl too close', checkDecision({ side: 'buy', sl: 1999.5 }, c, 1), 'SL terlalu dekat. Jarak minimal 1.00.')
-eq('tp wrong side', checkDecision({ side: 'sell', sl: 2002, tp: 2001 }, c, 1), 'TP sell harus di bawah harga entry.')
+eq('sl required', checkDecision({ side: 'buy' }, c, 1), 'An SL is required.')
+eq('sl wrong side', checkDecision({ side: 'buy', sl: 2001 }, c, 1), 'A buy SL must be below the price.')
+eq('sl too close', checkDecision({ side: 'buy', sl: 1999.5 }, c, 1), 'SL too close. Minimum distance 1.00.')
+eq('tp wrong side', checkDecision({ side: 'sell', sl: 2002, tp: 2001 }, c, 1), 'A sell TP must be below the entry price.')
 eq('valid sell', checkDecision({ side: 'sell', sl: 2002, tp: 1995 }, c, 1), null)
 
 // 4. results in R, spread included
@@ -56,9 +56,9 @@ o = runDecision(c, [bar(60, 2000, 2001, 1999.5, 2000)], { side: 'buy', type: 'li
 eq('limit never reached = unfilled 0R', [o.reason, o.r, o.entry], ['unfilled', 0, null])
 o = runDecision(c, [bar(60, 1996, 1996, 1994, 1994)], { side: 'sell', type: 'stop', price: 1995, sl: 1999 })
 eq('sell stop fills at 1995, closes at Ask 1994.2', [o.reason, o.r], ['time', 0.2])
-eq('buy limit above Ask rejected', checkDecision({ side: 'buy', type: 'limit', price: 2001, sl: 1995 }, c, 1), 'Buy limit harus di bawah harga Ask.')
-eq('sell stop above Bid rejected', checkDecision({ side: 'sell', type: 'stop', price: 2001, sl: 2005 }, c, 1), 'Sell stop harus di bawah harga Bid.')
-eq('pending SL measured from the order price', checkDecision({ side: 'buy', type: 'stop', price: 2003, sl: 2002.5 }, c, 1), 'SL terlalu dekat. Jarak minimal 1.00.')
+eq('buy limit above Ask rejected', checkDecision({ side: 'buy', type: 'limit', price: 2001, sl: 1995 }, c, 1), 'A buy limit must be below the Ask.')
+eq('sell stop above Bid rejected', checkDecision({ side: 'sell', type: 'stop', price: 2001, sl: 2005 }, c, 1), 'A sell stop must be below the Bid.')
+eq('pending SL measured from the order price', checkDecision({ side: 'buy', type: 'stop', price: 2003, sl: 2002.5 }, c, 1), 'SL too close. Minimum distance 1.00.')
 // small prices (EURUSD ~1.1): R must not suffer from rounding money to cents
 const fx = bar(0, 1.1, 1.1, 1.1, 1.1, 0.00006)
 o = runDecision(fx, [bar(60, 1.1, 1.1001, 1.0996, 1.0997, 0.00006)], { side: 'buy', sl: 1.09966 })

@@ -117,7 +117,7 @@ function syncSeries(s: ISeriesApi<SeriesType>, pts: { time: Time }[], st: SyncSt
 }
 
 const fmt2 = (v: number) => (Number.isFinite(v) ? pxAuto(v) : '–')
-const fmtInt = (v: number) => (Number.isFinite(v) ? Math.round(v).toLocaleString('id-ID') : '–')
+const fmtInt = (v: number) => (Number.isFinite(v) ? Math.round(v).toLocaleString('en-US') : '–')
 
 /** Hex color + alpha → rgba() for fills. */
 export function alpha(hex: string, a: number): string {
@@ -278,8 +278,8 @@ function movingAverage(kind: 'sma' | 'ema'): IndicatorDef {
     type: kind,
     name: kind === 'sma' ? 'Simple Moving Average' : 'Exponential Moving Average',
     place: 'overlay',
-    params: [P('length', 'Periode', kind === 'sma' ? 50 : 20)],
-    colors: [K('line', 'Garis', kind === 'sma' ? '#4c8dff' : '#f5a524')],
+    params: [P('length', 'Period', kind === 'sma' ? 50 : 20)],
+    colors: [K('line', 'Line', kind === 'sma' ? '#4c8dff' : '#f5a524')],
     label: (c) => `${kind.toUpperCase()} ${c.params.length}`,
     create(env, cfg) {
       const inst = new Lines(env, cfg, 'overlay', [{ key: 'v', label: '', color: 'line' }])
@@ -298,8 +298,8 @@ const bollinger: IndicatorDef = {
   type: 'bb',
   name: 'Bollinger Bands',
   place: 'overlay',
-  params: [P('length', 'Periode', 20), P('mult', 'Deviasi', 2, 0.1, 10, 0.1)],
-  colors: [K('mid', 'Tengah', '#f5a524'), K('band', 'Band', '#4c8dff')],
+  params: [P('length', 'Period', 20), P('mult', 'Deviation', 2, 0.1, 10, 0.1)],
+  colors: [K('mid', 'Middle', '#f5a524'), K('band', 'Band', '#4c8dff')],
   label: (c) => `BB ${c.params.length} ${c.params.mult}`,
   create(env, cfg) {
     const inst = new Banded(
@@ -332,8 +332,8 @@ const donchian: IndicatorDef = {
   type: 'donchian',
   name: 'Donchian Channel',
   place: 'overlay',
-  params: [P('length', 'Periode', 20)],
-  colors: [K('band', 'Band', '#2ec4b6'), K('mid', 'Tengah', '#7d8590')],
+  params: [P('length', 'Period', 20)],
+  colors: [K('band', 'Band', '#2ec4b6'), K('mid', 'Middle', '#7d8590')],
   label: (c) => `DC ${c.params.length}`,
   create(env, cfg) {
     const inst = new Banded(
@@ -363,10 +363,10 @@ const donchian: IndicatorDef = {
 
 const vwap: IndicatorDef = {
   type: 'vwap',
-  name: 'VWAP (harian, tick volume)',
+  name: 'VWAP (daily, tick volume)',
   place: 'overlay',
   params: [],
-  colors: [K('line', 'Garis', '#e879f9')],
+  colors: [K('line', 'Line', '#e879f9')],
   label: () => 'VWAP',
   create(env, cfg) {
     const inst = new Lines(env, cfg, 'overlay', [{ key: 'v', label: '', color: 'line' }])
@@ -384,8 +384,8 @@ const supertrend: IndicatorDef = {
   type: 'supertrend',
   name: 'Supertrend',
   place: 'overlay',
-  params: [P('length', 'ATR periode', 10), P('mult', 'Pengali', 3, 0.1, 20, 0.1)],
-  colors: [K('up', 'Naik', '#26a69a'), K('down', 'Turun', '#ef5350')],
+  params: [P('length', 'ATR period', 10), P('mult', 'Multiplier', 3, 0.1, 20, 0.1)],
+  colors: [K('up', 'Up', '#26a69a'), K('down', 'Down', '#ef5350')],
   label: (c) => `Supertrend ${c.params.length} ${c.params.mult}`,
   create(env, cfg) {
     let dir = new Int8Array(0)
@@ -411,8 +411,8 @@ const ichimoku: IndicatorDef = {
     K('tenkan', 'Tenkan', '#4c8dff'),
     K('kijun', 'Kijun', '#ef5350'),
     K('lagging', 'Chikou', '#a78bfa'),
-    K('cloudUp', 'Awan naik', '#26a69a'),
-    K('cloudDown', 'Awan turun', '#ef5350'),
+    K('cloudUp', 'Cloud up', '#26a69a'),
+    K('cloudDown', 'Cloud down', '#ef5350'),
   ],
   label: (c) => `Ichimoku ${c.params.conv} ${c.params.base} ${c.params.spanB} ${c.params.disp}`,
   create(env, cfg) {
@@ -465,11 +465,11 @@ const PIVOT_KEYS = ['r3', 'r2', 'r1', 'p', 's1', 's2', 's3'] as const
 
 const pivotsDef: IndicatorDef = {
   type: 'pivots',
-  name: 'Pivot Points harian (classic)',
+  name: 'Daily Pivot Points (classic)',
   place: 'overlay',
   params: [],
   colors: [K('p', 'Pivot', '#f5a524'), K('r', 'Resistance', '#ef5350'), K('s', 'Support', '#26a69a')],
-  label: () => 'Pivot harian',
+  label: () => 'Daily pivots',
   create(env, cfg) {
     const inst = new Lines(env, cfg, 'overlay', [
       { key: 'r1', label: 'R1', color: 'r' },
@@ -490,11 +490,11 @@ const pivotsDef: IndicatorDef = {
 
 const sessions: IndicatorDef = {
   type: 'sessions',
-  name: 'Sesi pasar (Asia, London, New York)',
+  name: 'Market sessions (Asia, London, New York)',
   place: 'overlay',
   params: [],
   colors: [],
-  label: () => 'Sesi: Asia · London · NY',
+  label: () => 'Sessions: Asia · London · NY',
   create(env) {
     const shade = new SessionShade()
     env.candles.attachPrimitive(shade)
@@ -552,8 +552,8 @@ const rsiDef = oscillator(
   {
     type: 'rsi',
     name: 'Relative Strength Index',
-    params: [P('length', 'Periode', 14)],
-    colors: [K('line', 'Garis', '#a78bfa')],
+    params: [P('length', 'Period', 14)],
+    colors: [K('line', 'Line', '#a78bfa')],
     label: (c) => `RSI ${c.params.length}`,
   },
   (ctx, p) => ({ v: C.rsi(ctx.c, p.length) }),
@@ -581,8 +581,8 @@ const atrDef = oscillator(
   {
     type: 'atr',
     name: 'Average True Range',
-    params: [P('length', 'Periode', 14)],
-    colors: [K('line', 'Garis', '#ef5350')],
+    params: [P('length', 'Period', 14)],
+    colors: [K('line', 'Line', '#ef5350')],
     label: (c) => `ATR ${c.params.length}`,
   },
   (ctx, p) => ({ v: C.atr(ctx.h, ctx.l, ctx.c, p.length) }),
@@ -594,7 +594,7 @@ const obvDef = oscillator(
     type: 'obv',
     name: 'On Balance Volume (tick volume)',
     params: [],
-    colors: [K('line', 'Garis', '#2ec4b6')],
+    colors: [K('line', 'Line', '#2ec4b6')],
     label: () => 'OBV',
   },
   (ctx) => ({ v: C.obv(ctx.c, ctx.v) }),
@@ -606,8 +606,8 @@ const mfiDef = oscillator(
   {
     type: 'mfi',
     name: 'Money Flow Index (tick volume)',
-    params: [P('length', 'Periode', 14)],
-    colors: [K('line', 'Garis', '#e879f9')],
+    params: [P('length', 'Period', 14)],
+    colors: [K('line', 'Line', '#e879f9')],
     label: (c) => `MFI ${c.params.length}`,
   },
   (ctx, p) => ({ v: C.mfi(ctx.h, ctx.l, ctx.c, ctx.v, p.length) }),
@@ -619,7 +619,7 @@ const macdDef: IndicatorDef = {
   type: 'macd',
   name: 'MACD',
   place: 'pane',
-  params: [P('fast', 'Cepat', 12), P('slow', 'Lambat', 26), P('signal', 'Signal', 9)],
+  params: [P('fast', 'Fast', 12), P('slow', 'Slow', 26), P('signal', 'Signal', 9)],
   colors: [
     K('macd', 'MACD', '#4c8dff'),
     K('signal', 'Signal', '#f5a524'),

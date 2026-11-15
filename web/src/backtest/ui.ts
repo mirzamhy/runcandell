@@ -25,30 +25,30 @@ import { current } from '../current'
 
 type Tab = 'strategy' | 'result' | 'trades' | 'optimize' | 'compare'
 const TABS: [Tab, string][] = [
-  ['strategy', 'Strategi'],
-  ['result', 'Hasil'],
-  ['trades', 'Trade'],
-  ['optimize', 'Optimasi'],
-  ['compare', 'Banding'],
+  ['strategy', 'Strategy'],
+  ['result', 'Results'],
+  ['trades', 'Trades'],
+  ['optimize', 'Optimise'],
+  ['compare', 'Compare'],
 ]
 const LISTS: [keyof Pick<StrategySpec, 'long' | 'short' | 'exitLong' | 'exitShort'>, string][] = [
-  ['long', 'Buy jika semua benar'],
-  ['short', 'Sell jika semua benar'],
-  ['exitLong', 'Tutup buy jika (opsional)'],
-  ['exitShort', 'Tutup sell jika (opsional)'],
+  ['long', 'Buy when all are true'],
+  ['short', 'Sell when all are true'],
+  ['exitLong', 'Close buys when (optional)'],
+  ['exitShort', 'Close sells when (optional)'],
 ]
-const REASON: Record<string, string> = { tp: 'TP', sl: 'SL', signal: 'Sinyal', time: 'Waktu', end: 'Akhir data', stopout: 'Stop-out', manual: 'Manual' }
-const DAYS = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
+const REASON: Record<string, string> = { tp: 'TP', sl: 'SL', signal: 'Signal', time: 'Time', end: 'End of data', stopout: 'Stop-out', manual: 'Manual' }
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const SPLIT = 0.7
 const MAX_COMBOS = 200
 
 /** period chips: key, days back from the end of the data (0 = all), label */
 const PERIODS: [string, number, string][] = [
-  ['1m', 30, '1 bulan'],
-  ['3m', 91, '3 bulan'],
-  ['6m', 182, '6 bulan'],
-  ['1y', 365, '1 tahun'],
-  ['all', 0, 'Semua data'],
+  ['1m', 30, '1 month'],
+  ['3m', 91, '3 months'],
+  ['6m', 182, '6 months'],
+  ['1y', 365, '1 year'],
+  ['all', 0, 'All data'],
 ]
 const MIRROR: Record<Op, Op> = { gt: 'lt', lt: 'gt', xup: 'xdown', xdown: 'xup' }
 
@@ -146,8 +146,8 @@ export class BacktestUI {
       <header class="bt-head">
         <div class="bt-tabs" role="tablist">${TABS.map(([t, l]) => `<button type="button" role="tab" data-tab="${t}">${l}</button>`).join('')}</div>
         <span class="bt-status" aria-live="polite"></span>
-        <button type="button" class="primary bt-run" data-act="run">▶ Jalankan</button>
-        <button type="button" class="bt-x" data-act="close" aria-label="Tutup backtest" title="Tutup">×</button>
+        <button type="button" class="primary bt-run" data-act="run">▶ Run</button>
+        <button type="button" class="bt-x" data-act="close" aria-label="Close backtest" title="Close">×</button>
       </header>
       <div class="bt-body"></div>`
     this.grip(r)
@@ -179,7 +179,7 @@ export class BacktestUI {
   private grip(r: HTMLElement) {
     const g = document.createElement('div')
     g.className = 'bt-grip'
-    g.title = 'Geser untuk ubah tinggi panel (klik dua kali: besar/kecil)'
+    g.title = 'Drag to resize the panel (double-click: big/small)'
     r.prepend(g)
     const ws = () => r.parentElement as HTMLElement
     const set = (px: number | null) => {
@@ -280,7 +280,7 @@ export class BacktestUI {
       for (const c of s.short)
         for (const o of [c.a, c.b]) if (o.src === 'num' && o.p[0] > 0 && o.p[0] < 100 && (c.a.src === 'rsi' || c.a.src.startsWith('stoch'))) o.p[0] = 100 - o.p[0]
       s.name = ''
-      toast('Syarat sell diisi kebalikan syarat buy.', 'good')
+      toast('Sell conditions set to the mirror of the buy conditions.', 'good')
       return this.changed(true)
     }
     if (act === 'mode') {
@@ -298,7 +298,7 @@ export class BacktestUI {
       return this.changed(true)
     }
     if (act === 'reset-code') {
-      void ask('Kode yang kamu tulis diganti contoh awal.', { title: 'Ganti kode?', ok: 'Ganti' }).then((ok) => {
+      void ask('Your code is replaced with the starter example.', { title: 'Replace code?', ok: 'Replace' }).then((ok) => {
         if (!ok) return
         s.code = defaultSpec().code
         this.changed(true)
@@ -309,7 +309,7 @@ export class BacktestUI {
       const r = this.report
       this.saved = { spec: r.spec, metrics: r.metrics, curve: r.curve, from: r.from, to: r.to }
       save(KEY.saved, this.saved)
-      toast('Hasil disimpan sebagai A. Ubah strategi, jalankan lagi, lalu buka tab Banding.', 'good')
+      toast('Result saved as A. Change the strategy, run it again, then open the Compare tab.', 'good')
       return
     }
     if (act === 'save-acct' && this.report) return this.o.onSave?.(this.report)
@@ -325,7 +325,7 @@ export class BacktestUI {
       this.spec.from = s.from
       this.spec.to = s.to
       this.changed(false)
-      toast('Parameter dipakai. Jalankan untuk lihat hasil penuh.', 'good')
+      toast('Parameters applied. Run it to see the full result.', 'good')
       return this.show('strategy')
     }
   }
@@ -408,28 +408,28 @@ export class BacktestUI {
   private sentence(): string {
     const s = this.spec
     const b = (t: string) => `<b>${esc(t)}</b>`
-    const rules = (list: Cond[]) => list.map((c) => b(fmtCond(c))).join(' <i>dan</i> ')
+    const rules = (list: Cond[]) => list.map((c) => b(fmtCond(c))).join(' <i>and</i> ')
     const parts: string[] = []
-    if (s.mode === 'code') parts.push('Sinyal dari <b>kode JavaScript</b>.')
+    if (s.mode === 'code') parts.push('Signals from <b>JavaScript code</b>.')
     else {
-      if (s.long.length) parts.push(`<span class="pos">BUY</span> saat ${rules(s.long)}.`)
-      if (s.short.length) parts.push(`<span class="neg">SELL</span> saat ${rules(s.short)}.`)
-      if (!s.long.length && !s.short.length) parts.push('<span class="neg">Belum ada aturan masuk.</span>')
+      if (s.long.length) parts.push(`<span class="pos">BUY</span> when ${rules(s.long)}.`)
+      if (s.short.length) parts.push(`<span class="neg">SELL</span> when ${rules(s.short)}.`)
+      if (!s.long.length && !s.short.length) parts.push('<span class="neg">No entry rules yet.</span>')
     }
-    const sl = s.sl.kind === 'none' ? 'tanpa stop loss' : s.sl.kind === 'atr' ? `SL ${b(`${s.sl.value}× ATR`)}` : `SL ${b(`$${s.sl.value}`)}`
+    const sl = s.sl.kind === 'none' ? 'no stop loss' : s.sl.kind === 'atr' ? `SL ${b(`${s.sl.value}× ATR`)}` : `SL ${b(`$${s.sl.value}`)}`
     const tp =
-      s.tp.kind === 'none' ? 'tanpa take profit' : s.tp.kind === 'rr' ? `TP ${b(`${s.tp.value}× jarak SL`)}` : s.tp.kind === 'atr' ? `TP ${b(`${s.tp.value}× ATR`)}` : `TP ${b(`$${s.tp.value}`)}`
-    const size = s.sizing.kind === 'risk' ? `risiko ${b(`${s.sizing.value}%`)} saldo per trade` : b(`${s.sizing.value} lot`)
+      s.tp.kind === 'none' ? 'no take profit' : s.tp.kind === 'rr' ? `TP ${b(`${s.tp.value}× SL distance`)}` : s.tp.kind === 'atr' ? `TP ${b(`${s.tp.value}× ATR`)}` : `TP ${b(`$${s.tp.value}`)}`
+    const size = s.sizing.kind === 'risk' ? `risk ${b(`${s.sizing.value}%`)} of balance per trade` : b(`${s.sizing.value} lot`)
     parts.push(`${sl}, ${tp}, ${size}.`)
     const per = PERIODS.find(([k]) => k === this.periodKey())
-    parts.push(`<span class="bt-muted">Candle ${s.tf} · ${per ? per[2] : 'rentang tanggal sendiri'}${s.hours.on ? ` · entry jam ${s.hours.from}–${s.hours.to}` : ''}</span>`)
+    parts.push(`<span class="bt-muted">Candle ${s.tf} · ${per ? per[2] : 'custom date range'}${s.hours.on ? ` · entries ${s.hours.from}–${s.hours.to}h` : ''}</span>`)
     return parts.join(' ')
   }
 
   private strategyHtml(): string {
     const s = this.spec
     const shift = makeShifter(this.o.zone())
-    const spanText = `${formatWall(shift(this.o.span.from), false)} s/d ${formatWall(shift(this.o.span.to), false)}`
+    const spanText = `${formatWall(shift(this.o.span.from), false)} to ${formatWall(shift(this.o.span.to), false)}`
     const opt = (v: string, label: string, cur: string) => `<option value="${v}"${v === cur ? ' selected' : ''}>${label}</option>`
     const per = this.periodKey()
     const err = this.validate()
@@ -438,59 +438,59 @@ export class BacktestUI {
         <div class="st-summary" data-summary>${this.sentence()}</div>
 
         <section class="st-sec">
-          <h4><i>1</i> Pilih titik awal</h4>
+          <h4><i>1</i> Pick a starting point</h4>
           <div class="st-chips">${PRESETS.map((p, i) => `<button type="button" class="st-chip" data-act="preset" data-v="${i}" aria-pressed="${p.name === s.name}">${esc(p.name)}</button>`).join('')}
-            <button type="button" class="st-chip" data-act="mode" data-v="${s.mode === 'code' ? 'rules' : 'code'}">${s.mode === 'code' ? '← Kembali ke aturan' : '{ } Tulis kode JS'}</button></div>
-          <p class="bt-hint">Contoh mengisi aturan di bawah. Setelah itu ubah sesukamu.</p>
+            <button type="button" class="st-chip" data-act="mode" data-v="${s.mode === 'code' ? 'rules' : 'code'}">${s.mode === 'code' ? '← Back to rules' : '{ } Write JS code'}</button></div>
+          <p class="bt-hint">An example fills in the rules below. Then change whatever you like.</p>
         </section>
 
         <section class="st-sec">
           <h4><i>2</i> Data</h4>
           <div class="st-row"><span class="st-lab">Candle</span><div class="bt-seg">${TIMEFRAMES.map((t) => `<button type="button" data-act="tf" data-v="${t}" aria-pressed="${t === s.tf}">${t}</button>`).join('')}</div></div>
-          <div class="st-row"><span class="st-lab">Periode</span><div class="bt-seg">${PERIODS.map(([k, , l]) => `<button type="button" data-act="period" data-v="${k}" aria-pressed="${k === per}">${l}</button>`).join('')}
-            <button type="button" data-act="period" data-v="custom" aria-pressed="${per === ''}">Pilih tanggal</button></div></div>
-          ${per === '' ? `<div class="st-row"><span class="st-lab"></span><div class="st-dates"><input type="date" data-date="from" value="${this.dateValue(s.from, false)}" aria-label="Dari tanggal" /><span class="bt-muted">s/d</span><input type="date" data-date="to" value="${this.dateValue(s.to, true)}" aria-label="Sampai tanggal" /></div></div>` : ''}
-          <p class="bt-hint">Data tersedia ${spanText}.</p>
+          <div class="st-row"><span class="st-lab">Period</span><div class="bt-seg">${PERIODS.map(([k, , l]) => `<button type="button" data-act="period" data-v="${k}" aria-pressed="${k === per}">${l}</button>`).join('')}
+            <button type="button" data-act="period" data-v="custom" aria-pressed="${per === ''}">Pick dates</button></div></div>
+          ${per === '' ? `<div class="st-row"><span class="st-lab"></span><div class="st-dates"><input type="date" data-date="from" value="${this.dateValue(s.from, false)}" aria-label="From date" /><span class="bt-muted">to</span><input type="date" data-date="to" value="${this.dateValue(s.to, true)}" aria-label="To date" /></div></div>` : ''}
+          <p class="bt-hint">Data available ${spanText}.</p>
         </section>
 
         ${s.mode === 'rules' ? this.rulesHtml() : this.codeHtml()}
 
         <section class="st-sec">
-          <h4><i>4</i> Keluar & ukuran posisi</h4>
+          <h4><i>4</i> Exits & position size</h4>
           <div class="st-grid">
             <label class="st-field"><span>Stop loss</span><div class="bt-pair">
-              <select data-path="sl.kind">${opt('atr', '× ATR(14)', s.sl.kind)}${opt('price', 'Jarak $', s.sl.kind)}${opt('none', 'Tanpa SL', s.sl.kind)}</select>
-              ${s.sl.kind === 'none' ? '' : `<input type="number" step="any" min="0" data-path="sl.value" value="${s.sl.value}" aria-label="Nilai SL" />`}</div></label>
+              <select data-path="sl.kind">${opt('atr', '× ATR(14)', s.sl.kind)}${opt('price', 'Distance $', s.sl.kind)}${opt('none', 'No SL', s.sl.kind)}</select>
+              ${s.sl.kind === 'none' ? '' : `<input type="number" step="any" min="0" data-path="sl.value" value="${s.sl.value}" aria-label="SL value" />`}</div></label>
             <label class="st-field"><span>Take profit</span><div class="bt-pair">
-              <select data-path="tp.kind">${opt('rr', '× jarak SL (R:R)', s.tp.kind)}${opt('atr', '× ATR(14)', s.tp.kind)}${opt('price', 'Jarak $', s.tp.kind)}${opt('none', 'Tanpa TP', s.tp.kind)}</select>
-              ${s.tp.kind === 'none' ? '' : `<input type="number" step="any" min="0" data-path="tp.value" value="${s.tp.value}" aria-label="Nilai TP" />`}</div></label>
-            <label class="st-field"><span>Ukuran posisi</span><div class="bt-pair">
-              <select data-path="sizing.kind">${opt('risk', '% saldo dirisikokan', s.sizing.kind)}${opt('fixed', 'Lot tetap', s.sizing.kind)}</select>
-              <input type="number" step="any" min="0.01" data-path="sizing.value" value="${s.sizing.value}" aria-label="Nilai ukuran" /></div></label>
+              <select data-path="tp.kind">${opt('rr', '× SL distance (R:R)', s.tp.kind)}${opt('atr', '× ATR(14)', s.tp.kind)}${opt('price', 'Distance $', s.tp.kind)}${opt('none', 'No TP', s.tp.kind)}</select>
+              ${s.tp.kind === 'none' ? '' : `<input type="number" step="any" min="0" data-path="tp.value" value="${s.tp.value}" aria-label="TP value" />`}</div></label>
+            <label class="st-field"><span>Position size</span><div class="bt-pair">
+              <select data-path="sizing.kind">${opt('risk', '% of balance at risk', s.sizing.kind)}${opt('fixed', 'Fixed lots', s.sizing.kind)}</select>
+              <input type="number" step="any" min="0.01" data-path="sizing.value" value="${s.sizing.value}" aria-label="Size value" /></div></label>
           </div>
-          <p class="bt-hint">ATR = rata-rata panjang candle 14 terakhir, jadi SL ikut melebar saat pasar ramai. "% saldo" menghitung lot supaya kalau kena SL, rugi segitu persen.</p>
+          <p class="bt-hint">ATR = average candle range over the last 14, so the SL widens when the market is busy. "% of balance" sizes the lots so hitting the SL loses exactly that percentage.</p>
           <details class="st-more"${s.hours.on || s.reverse || s.maxBars > 0 || s.commission > 0 || s.slippage > 0 ? ' open' : ''}>
-            <summary>Lanjutan: jam trading, modal, biaya</summary>
+            <summary>Advanced: trading hours, capital, costs</summary>
             <div class="st-grid">
-              <div class="st-field"><span><label><input type="checkbox" data-path="hours.on"${s.hours.on ? ' checked' : ''} /> Hanya entry jam</label></span><div class="bt-pair">
-                <input type="number" min="0" max="23" step="1" data-path="hours.from" value="${s.hours.from}" aria-label="Jam mulai"${s.hours.on ? '' : ' disabled'} />
-                <span class="bt-muted">s/d</span>
-                <input type="number" min="0" max="24" step="1" data-path="hours.to" value="${s.hours.to}" aria-label="Jam selesai"${s.hours.on ? '' : ' disabled'} /></div></div>
-              <label class="st-field"><span>Tutup paksa setelah</span><div class="bt-pair"><input type="number" min="0" step="1" data-path="maxBars" value="${s.maxBars}" /><span class="bt-muted">candle (0 = tidak)</span></div></label>
-              <label class="st-field"><span>Saldo awal $</span><input type="number" min="100" step="100" data-path="balance" value="${s.balance}" /></label>
+              <div class="st-field"><span><label><input type="checkbox" data-path="hours.on"${s.hours.on ? ' checked' : ''} /> Only enter between</label></span><div class="bt-pair">
+                <input type="number" min="0" max="23" step="1" data-path="hours.from" value="${s.hours.from}" aria-label="Start hour"${s.hours.on ? '' : ' disabled'} />
+                <span class="bt-muted">and</span>
+                <input type="number" min="0" max="24" step="1" data-path="hours.to" value="${s.hours.to}" aria-label="End hour"${s.hours.on ? '' : ' disabled'} /></div></div>
+              <label class="st-field"><span>Force close after</span><div class="bt-pair"><input type="number" min="0" step="1" data-path="maxBars" value="${s.maxBars}" /><span class="bt-muted">candles (0 = never)</span></div></label>
+              <label class="st-field"><span>Starting balance $</span><input type="number" min="100" step="100" data-path="balance" value="${s.balance}" /></label>
               <label class="st-field"><span>Leverage</span><select data-path="leverage">${[50, 100, 200, 500, 1000].map((l) => `<option value="${l}"${l === s.leverage ? ' selected' : ''}>1:${l}</option>`).join('')}</select></label>
-              <label class="st-field"><span>Komisi per lot $</span><input type="number" min="0" step="0.5" data-path="commission" value="${s.commission}" /></label>
+              <label class="st-field"><span>Commission per lot $</span><input type="number" min="0" step="0.5" data-path="commission" value="${s.commission}" /></label>
               <label class="st-field"><span>Slippage $</span><input type="number" min="0" step="0.01" data-path="slippage" value="${s.slippage}" /></label>
             </div>
-            <label class="st-check"><input type="checkbox" data-path="reverse"${s.reverse ? ' checked' : ''} /> Sinyal lawan menutup posisi dan langsung membuka arah sebaliknya</label>
-            <p class="bt-hint">Jam mengikuti zona waktu chart. Contoh 14–23 WIB = sesi London + New York.</p>
+            <label class="st-check"><input type="checkbox" data-path="reverse"${s.reverse ? ' checked' : ''} /> An opposite signal closes the position and opens the other way</label>
+            <p class="bt-hint">Hours follow the chart time zone. E.g. 14–23 WIB (UTC+7) = London + New York sessions.</p>
           </details>
         </section>
 
         <div class="st-go">
           <p class="st-err" data-err>${err ? esc(err) : ''}</p>
-          <button type="button" class="primary st-run" data-act="run">${this.running ? '■ Batal' : '▶ Jalankan backtest'}</button>
-          <span class="bt-muted">atau Ctrl+Enter</span>
+          <button type="button" class="primary st-run" data-act="run">${this.running ? '■ Cancel' : '▶ Run backtest'}</button>
+          <span class="bt-muted">or Ctrl+Enter</span>
         </div>
       </div>`
   }
@@ -509,7 +509,7 @@ export class BacktestUI {
           `<label class="st-param"><small>${esc(p.name)}</small><input type="number" step="any" data-path="${path}.p.${j}" value="${o.p[j]}" aria-label="${esc(SOURCES[o.src].label)} ${esc(p.name)}" /></label>`,
       )
       .join('')
-    return `<span class="st-operand"><select data-src="${path}" aria-label="Indikator atau harga">${sel}</select>${params}</span>`
+    return `<span class="st-operand"><select data-src="${path}" aria-label="Indicator or price">${sel}</select>${params}</span>`
   }
 
   private condList(list: (typeof LISTS)[number][0]): string {
@@ -517,11 +517,11 @@ export class BacktestUI {
     return this.spec[list]
       .map((c, i) => {
         const p = `${list}.${i}`
-        return `<div class="st-cond">${i ? '<span class="st-and">dan</span>' : ''}
+        return `<div class="st-cond">${i ? '<span class="st-and">and</span>' : ''}
           ${this.operandHtml(`${p}.a`, c.a)}
-          <select data-path="${p}.op" class="st-op" aria-label="Pembanding">${ops(c.op)}</select>
+          <select data-path="${p}.op" class="st-op" aria-label="Comparison">${ops(c.op)}</select>
           ${this.operandHtml(`${p}.b`, c.b)}
-          <button type="button" class="st-del" data-act="del" data-list="${list}" data-i="${i}" aria-label="Hapus kondisi" title="Hapus kondisi">✕</button></div>`
+          <button type="button" class="st-del" data-act="del" data-list="${list}" data-i="${i}" aria-label="Remove condition" title="Remove condition">✕</button></div>`
       })
       .join('')
   }
@@ -531,32 +531,32 @@ export class BacktestUI {
     const side = (list: 'long' | 'short', title: string, cls: string) => `
       <div class="st-side ${cls}">
         <h5>${title}</h5>
-        ${this.condList(list) || '<p class="bt-muted">Tidak pernah ' + (list === 'long' ? 'buy' : 'sell') + '.</p>'}
+        ${this.condList(list) || '<p class="bt-muted">Never ' + (list === 'long' ? 'buys' : 'sells') + '.</p>'}
         <div class="st-side-acts">
-          <button type="button" class="bt-add" data-act="add" data-list="${list}">+ Tambah syarat</button>
-          ${list === 'short' && s.long.length ? '<button type="button" class="bt-link" data-act="mirror" title="Isi syarat sell dengan kebalikan syarat buy">Salin kebalikan buy</button>' : ''}
+          <button type="button" class="bt-add" data-act="add" data-list="${list}">+ Add condition</button>
+          ${list === 'short' && s.long.length ? '<button type="button" class="bt-link" data-act="mirror" title="Fill the sell conditions with the mirror of the buy conditions">Mirror the buy side</button>' : ''}
         </div>
       </div>`
     const exits = s.exitLong.length + s.exitShort.length > 0
     return `
       <section class="st-sec">
-        <h4><i>3</i> Kapan masuk</h4>
-        <div class="st-sides">${side('long', 'BUY kalau semua syarat ini benar', 'buy')}${side('short', 'SELL kalau semua syarat ini benar', 'sell')}</div>
-        <p class="bt-hint">Dicek tiap candle tutup, order masuk di open candle berikutnya. "Memotong ke atas" = candle sebelumnya di bawah, candle ini di atas.</p>
+        <h4><i>3</i> When to enter</h4>
+        <div class="st-sides">${side('long', 'BUY when all of these are true', 'buy')}${side('short', 'SELL when all of these are true', 'sell')}</div>
+        <p class="bt-hint">Checked at every candle close; orders fill at the next candle's open. "Crosses above" = below on the previous candle, above on this one.</p>
         <details class="st-more"${exits ? ' open' : ''}>
-          <summary>Tutup posisi pakai sinyal (opsional, selain SL/TP)</summary>
+          <summary>Close positions on a signal (optional, besides SL/TP)</summary>
           <div class="st-sides">
-            <div class="st-side buy"><h5>Tutup BUY kalau</h5>${this.condList('exitLong') || '<p class="bt-muted">Hanya SL/TP.</p>'}<div class="st-side-acts"><button type="button" class="bt-add" data-act="add" data-list="exitLong">+ Tambah syarat</button></div></div>
-            <div class="st-side sell"><h5>Tutup SELL kalau</h5>${this.condList('exitShort') || '<p class="bt-muted">Hanya SL/TP.</p>'}<div class="st-side-acts"><button type="button" class="bt-add" data-act="add" data-list="exitShort">+ Tambah syarat</button></div></div>
+            <div class="st-side buy"><h5>Close BUY when</h5>${this.condList('exitLong') || '<p class="bt-muted">SL/TP only.</p>'}<div class="st-side-acts"><button type="button" class="bt-add" data-act="add" data-list="exitLong">+ Add condition</button></div></div>
+            <div class="st-side sell"><h5>Close SELL when</h5>${this.condList('exitShort') || '<p class="bt-muted">SL/TP only.</p>'}<div class="st-side-acts"><button type="button" class="bt-add" data-act="add" data-list="exitShort">+ Add condition</button></div></div>
           </div>
         </details>
       </section>`
   }
 
   private codeHtml(): string {
-    return `<section class="st-sec"><h4><i>3</i> Kode JavaScript <button type="button" class="bt-link" data-act="reset-code">kembalikan contoh</button></h4>
-      <textarea class="bt-code" data-path="code" spellcheck="false" aria-label="Kode strategi">${esc(this.spec.code)}</textarea>
-      <p class="bt-hint">Kode jalan di Web Worker, terpisah dari halaman. Jangan tempel kode dari orang yang tidak kamu percaya.</p></section>`
+    return `<section class="st-sec"><h4><i>3</i> JavaScript code <button type="button" class="bt-link" data-act="reset-code">restore example</button></h4>
+      <textarea class="bt-code" data-path="code" spellcheck="false" aria-label="Strategy code">${esc(this.spec.code)}</textarea>
+      <p class="bt-hint">The code runs in a Web Worker, apart from the page. Never paste code from someone you do not trust.</p></section>`
   }
 
   /** Load a backtest saved on the account: as the strategy to edit, or as comparison A. */
@@ -588,11 +588,11 @@ export class BacktestUI {
 
   private validate(): string | null {
     const s = this.spec
-    if (s.mode === 'rules' && !s.long.length && !s.short.length) return 'Tambah minimal satu kondisi buy atau sell.'
-    if (s.sizing.kind === 'risk' && s.sl.kind === 'none') return 'Ukuran "% saldo" butuh stop loss. Pakai SL atau lot tetap.'
-    if (s.tp.kind === 'rr' && s.sl.kind === 'none') return 'TP R:R butuh stop loss.'
-    if (!(s.sizing.value > 0)) return 'Ukuran posisi harus lebih dari 0.'
-    if (s.from !== null && s.to !== null && s.to <= s.from) return 'Tanggal "Sampai" harus setelah "Dari".'
+    if (s.mode === 'rules' && !s.long.length && !s.short.length) return 'Add at least one buy or sell condition.'
+    if (s.sizing.kind === 'risk' && s.sl.kind === 'none') return 'Sizing by "% of balance" needs a stop loss. Use an SL or fixed lots.'
+    if (s.tp.kind === 'rr' && s.sl.kind === 'none') return 'An R:R take profit needs a stop loss.'
+    if (!(s.sizing.value > 0)) return 'Position size must be above 0.'
+    if (s.from !== null && s.to !== null && s.to <= s.from) return 'The "To" date must be after the "From" date.'
     return null
   }
 
@@ -603,7 +603,7 @@ export class BacktestUI {
   run() {
     const err = this.validate()
     if (err) return toast(err, 'bad')
-    this.setRunning(true, 'Mulai…')
+    this.setRunning(true, 'Starting…')
     this.post({ id: ++this.jobId, kind: 'run', spec: structuredClone(this.spec), zone: this.o.zone(), symbol: current().symbol })
   }
 
@@ -611,16 +611,16 @@ export class BacktestUI {
     this.worker?.terminate()
     this.worker = null
     this.jobId++
-    this.setRunning(false, 'Dibatalkan')
+    this.setRunning(false, 'Cancelled')
   }
 
   private setRunning(on: boolean, text: string) {
     this.running = on
     this.status.textContent = text
-    this.runBtn.textContent = on ? '■ Batal' : '▶ Jalankan'
+    this.runBtn.textContent = on ? '■ Cancel' : '▶ Run'
     this.runBtn.classList.toggle('primary', !on)
     const sb = this.body.querySelector<HTMLButtonElement>('.st-run')
-    if (sb) sb.textContent = on ? '■ Batal' : '▶ Jalankan backtest'
+    if (sb) sb.textContent = on ? '■ Cancel' : '▶ Run backtest'
     const ob = this.body.querySelector<HTMLButtonElement>('[data-act="optimize"]')
     if (ob) ob.disabled = on
   }
@@ -634,14 +634,14 @@ export class BacktestUI {
     }
     if (m.kind === 'result') {
       this.report = m.report
-      this.setRunning(false, `${m.report.metrics.trades} trade · ${(m.report.ms / 1000).toFixed(1)} dtk`)
+      this.setRunning(false, `${m.report.metrics.trades} trades · ${(m.report.ms / 1000).toFixed(1)} s`)
       this.o.onTrades(m.report.trades)
       return this.show('result')
     }
     if (m.kind === 'optimized' && this.opt) {
       this.opt.rows = m.rows
       this.opt.isEnd = m.isEnd
-      this.setRunning(false, `${m.rows.length} kombinasi selesai`)
+      this.setRunning(false, `${m.rows.length} combinations done`)
       return this.show('optimize')
     }
   }
@@ -660,44 +660,44 @@ export class BacktestUI {
 
   private resultHtml(): string {
     const r = this.report
-    if (!r) return '<p class="bt-empty">Belum ada hasil. Atur strategi lalu klik <b>Jalankan</b>.</p>'
+    if (!r) return '<p class="bt-empty">No results yet. Set up a strategy and click <b>Run</b>.</p>'
     const m = r.metrics
     const z = this.hourOf()
     const tile = (label: string, value: string, sub = '', c = '') => `<div class="bt-tile"><span>${label}</span><b class="${c}">${value}</b>${sub ? `<small>${sub}</small>` : ''}</div>`
     const notes: string[] = []
-    if (m.trades < 30) notes.push(`<li class="warn">Cuma ${m.trades} trade: sampel kecil, hasilnya belum bisa dipercaya. Perpanjang rentang tanggal.</li>`)
+    if (m.trades < 30) notes.push(`<li class="warn">Only ${m.trades} trades: a small sample, so the result is not reliable yet. Use a longer date range.</li>`)
     const sk = Object.entries(r.skipped)
-    if (sk.length) notes.push(`<li>Sinyal tidak ditradingkan: ${sk.map(([k, v]) => `${esc(k)} (${v})`).join(', ')}.</li>`)
-    notes.push('<li>Spread dari data broker. Swap menginap tidak dihitung. Hasil masa lalu tidak menjamin hasil ke depan.</li>')
+    if (sk.length) notes.push(`<li>Signals not traded: ${sk.map(([k, v]) => `${esc(k)} (${v})`).join(', ')}.</li>`)
+    notes.push('<li>Spread comes from broker data. Overnight swap is not included. Past results do not guarantee future results.</li>')
 
     const zoneLabel = this.o.zone() === 'UTC' ? 'UTC' : this.o.zone().split('/').pop()!.replace('_', ' ')
     const byHour = breakdown(r.trades, [...Array(24).keys()].map(String), (t) => String(z.hour(t.openTime)))
     const byDay = breakdown(r.trades, ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'], (t) => DAYS[z.day(t.openTime)])
     const bySess = breakdown(r.trades, SESSIONS, (t) => sessionOf(t.openTime))
     return `
-      <p class="bt-sum">${esc(describe(r.spec))}<br /><span class="bt-muted">${z.date(r.from)} s/d ${z.date(r.to)} · ${r.bars.toLocaleString('id-ID')} candle ${r.spec.tf} · SL/TP dicek di ${r.exec}</span></p>
+      <p class="bt-sum">${esc(describe(r.spec))}<br /><span class="bt-muted">${z.date(r.from)} to ${z.date(r.to)} · ${r.bars.toLocaleString('en-US')} ${r.spec.tf} candles · SL/TP checked on ${r.exec}</span></p>
       <div class="bt-tiles">
         ${tile('Net profit', usd(m.net, true), pct(m.netPct, true), cls(m.net))}
-        ${tile('Trade', String(m.trades), `buy ${m.long.trades} · sell ${m.short.trades}`)}
-        ${tile('Win rate', pct(m.winRate), `${m.wins} menang`)}
-        ${tile('Profit factor', num(m.profitFactor), 'untung kotor ÷ rugi kotor')}
+        ${tile('Trades', String(m.trades), `buy ${m.long.trades} · sell ${m.short.trades}`)}
+        ${tile('Win rate', pct(m.winRate), `${m.wins} wins`)}
+        ${tile('Profit factor', num(m.profitFactor), 'gross profit ÷ gross loss')}
         ${tile('Max drawdown', usd(-m.maxDd), pct(-m.maxDdPct), m.maxDd > 0 ? 'neg' : '')}
-        ${tile('Rata-rata R', Number.isFinite(m.avgR) ? num(m.avgR) + 'R' : '–', 'hasil ÷ risiko awal', cls(m.avgR))}
-        ${tile('Expectancy', usd(m.expectancy, true), 'rata-rata per trade', cls(m.expectancy))}
-        ${tile('Sharpe', num(m.sharpe), 'harian, disetahunkan')}
-        ${tile('Rata-rata menang', usd(m.avgWin), `kalah ${usd(m.avgLoss)}`)}
-        ${tile('Kalah beruntun', String(m.maxLossStreak), `durasi rata-rata ${num(m.avgBars, 1)} candle`)}
+        ${tile('Average R', Number.isFinite(m.avgR) ? num(m.avgR) + 'R' : '–', 'result ÷ initial risk', cls(m.avgR))}
+        ${tile('Expectancy', usd(m.expectancy, true), 'average per trade', cls(m.expectancy))}
+        ${tile('Sharpe', num(m.sharpe), 'daily, annualised')}
+        ${tile('Average win', usd(m.avgWin), `loss ${usd(m.avgLoss)}`)}
+        ${tile('Losing streak', String(m.maxLossStreak), `average length ${num(m.avgBars, 1)} candles`)}
         ${tile('Buy', usd(m.long.net, true), `win ${pct(m.long.winRate)}`, cls(m.long.net))}
         ${tile('Sell', usd(m.short.net, true), `win ${pct(m.short.winRate)}`, cls(m.short.net))}
       </div>
-      <div class="bt-canvas"><canvas data-curve="result" aria-label="Kurva equity dan drawdown"></canvas></div>
+      <div class="bt-canvas"><canvas data-curve="result" aria-label="Equity and drawdown curve"></canvas></div>
       <ul class="bt-notes">${notes.join('')}</ul>
       <div class="bt-cols bt-breakdowns">
-        ${this.breakdownHtml(`Jam masuk (${esc(zoneLabel)})`, byHour.filter((x) => x.trades), (k) => k.padStart(2, '0') + ':00')}
-        ${this.breakdownHtml('Hari', byDay)}
-        ${this.breakdownHtml('Sesi (jam UTC)', bySess)}
+        ${this.breakdownHtml(`Entry hour (${esc(zoneLabel)})`, byHour.filter((x) => x.trades), (k) => k.padStart(2, '0') + ':00')}
+        ${this.breakdownHtml('Day', byDay)}
+        ${this.breakdownHtml('Session (UTC hours)', bySess)}
       </div>
-      <div class="bt-actions"><button type="button" data-act="saveA">Simpan sebagai A untuk dibandingkan</button>${this.o.onSave ? '<button type="button" data-act="save-acct">Simpan ke akun</button>' : ''}</div>`
+      <div class="bt-actions"><button type="button" data-act="saveA">Save as A to compare</button>${this.o.onSave ? '<button type="button" data-act="save-acct">Save to account</button>' : ''}</div>`
   }
 
   private breakdownHtml(title: string, rows: { key: string; trades: number; winRate: number; net: number }[], label = (k: string) => k): string {
@@ -708,15 +708,15 @@ export class BacktestUI {
           <td class="bt-barcell"><i class="${r.net >= 0 ? 'pos' : 'neg'}" style="width:${(Math.abs(r.net) / max) * 100}%"></i><span class="${cls(r.net)}">${usd(r.net, true)}</span></td></tr>`,
       )
       .join('')
-    return `<section class="bt-card"><h4>${title}</h4><div class="bt-scroll"><table class="bt-table"><thead><tr><th></th><th>Trade</th><th>Win</th><th>Net</th></tr></thead><tbody>${body || '<tr><td colspan="4" class="bt-muted">Tidak ada trade.</td></tr>'}</tbody></table></div></section>`
+    return `<section class="bt-card"><h4>${title}</h4><div class="bt-scroll"><table class="bt-table"><thead><tr><th></th><th>Trades</th><th>Win</th><th>Net</th></tr></thead><tbody>${body || '<tr><td colspan="4" class="bt-muted">No trades.</td></tr>'}</tbody></table></div></section>`
   }
 
   // ---------- trades tab ----------
 
   private tradesHtml(): string {
     const r = this.report
-    if (!r) return '<p class="bt-empty">Belum ada hasil.</p>'
-    if (!r.trades.length) return '<p class="bt-empty">Strategi tidak membuka trade di rentang ini.</p>'
+    if (!r) return '<p class="bt-empty">No results yet.</p>'
+    if (!r.trades.length) return '<p class="bt-empty">The strategy opened no trades in this range.</p>'
     const z = this.hourOf()
     const LIMIT = 2000
     const rows = r.trades
@@ -728,8 +728,8 @@ export class BacktestUI {
           <td class="${cls(t.r ?? 0)}">${t.r === null ? '–' : t.r.toFixed(2) + 'R'}</td></tr>`,
       )
       .join('')
-    return `<p class="bt-hint">Klik baris untuk lompat ke candle-nya di chart (timeframe ikut strategi).${r.trades.length > LIMIT ? ` Tampil ${LIMIT} dari ${r.trades.length} trade.` : ''}</p>
-      <div class="bt-scroll bt-trades"><table class="bt-table"><thead><tr><th>#</th><th>Arah</th><th>Masuk</th><th>Harga</th><th>Keluar</th><th>Harga</th><th>Sebab</th><th>Lot</th><th>P/L</th><th>R</th></tr></thead>
+    return `<p class="bt-hint">Click a row to jump to its candle on the chart (timeframe follows the strategy).${r.trades.length > LIMIT ? ` Showing ${LIMIT} of ${r.trades.length} trades.` : ''}</p>
+      <div class="bt-scroll bt-trades"><table class="bt-table"><thead><tr><th>#</th><th>Side</th><th>Entry</th><th>Price</th><th>Exit</th><th>Price</th><th>Reason</th><th>Lots</th><th>P/L</th><th>R</th></tr></thead>
       <tbody>${rows}</tbody></table></div>`
   }
 
@@ -766,30 +766,30 @@ export class BacktestUI {
   private comboText(): string {
     const [v1, v2] = this.combos()
     const n = v1.length * (v2 ? v2.length : 1)
-    return n > MAX_COMBOS ? `${n} kombinasi (maks ${MAX_COMBOS})` : `${n} kombinasi`
+    return n > MAX_COMBOS ? `${n} combinations (max ${MAX_COMBOS})` : `${n} combinations`
   }
 
   private optimizeHtml(): string {
     const params = listParams(this.spec)
-    if (!params.length) return '<p class="bt-empty">Strategi ini tidak punya parameter angka untuk dioptimasi.</p>'
+    if (!params.length) return '<p class="bt-empty">This strategy has no numeric parameters to optimise.</p>'
     if (!this.optForm || !params.some((p) => p.id === this.optForm!.p1)) {
       this.optForm = { p1: params[0].id, a1: 0, b1: 0, s1: 1, p2: '', a2: 0, b2: 0, s2: 1 }
       this.fillRange(1)
     }
     const f = this.optForm
     const sel = (key: 'p1' | 'p2', cur: string, none: boolean) =>
-      `<select data-opt="${key}">${none ? `<option value="">— tidak ada —</option>` : ''}${params.map((p) => `<option value="${esc(p.id)}"${p.id === cur ? ' selected' : ''}>${esc(p.label)}</option>`).join('')}</select>`
+      `<select data-opt="${key}">${none ? `<option value="">— none —</option>` : ''}${params.map((p) => `<option value="${esc(p.id)}"${p.id === cur ? ' selected' : ''}>${esc(p.label)}</option>`).join('')}</select>`
     const range = (n: 1 | 2) =>
-      `<input type="number" step="any" data-opt="a${n}" value="${f[`a${n}`]}" aria-label="Dari" /><span class="bt-muted">s/d</span>
-       <input type="number" step="any" data-opt="b${n}" value="${f[`b${n}`]}" aria-label="Sampai" /><span class="bt-muted">langkah</span>
-       <input type="number" step="any" data-opt="s${n}" value="${f[`s${n}`]}" aria-label="Langkah" />`
+      `<input type="number" step="any" data-opt="a${n}" value="${f[`a${n}`]}" aria-label="From" /><span class="bt-muted">to</span>
+       <input type="number" step="any" data-opt="b${n}" value="${f[`b${n}`]}" aria-label="To" /><span class="bt-muted">step</span>
+       <input type="number" step="any" data-opt="s${n}" value="${f[`s${n}`]}" aria-label="Step" />`
     return `
       <section class="bt-card">
-        <h4>Optimasi parameter</h4>
-        <p class="bt-hint">Data dibagi dua: ${SPLIT * 100}% awal untuk mencari parameter terbaik (data latih), ${Math.round((1 - SPLIT) * 100)}% akhir untuk mengujinya (data uji). Yang penting hasil di data uji.</p>
+        <h4>Parameter optimisation</h4>
+        <p class="bt-hint">The data is split in two: the first ${SPLIT * 100}% finds the best parameters (training data), the last ${Math.round((1 - SPLIT) * 100)}% tests them (test data). The test result is what counts.</p>
         <div class="bt-optrow"><span>Parameter 1</span>${sel('p1', f.p1, false)}${range(1)}</div>
         <div class="bt-optrow"><span>Parameter 2</span>${sel('p2', f.p2, true)}${f.p2 ? range(2) : ''}</div>
-        <div class="bt-optrow"><span class="bt-combos">${this.comboText()}</span><button type="button" class="primary" data-act="optimize"${this.running ? ' disabled' : ''}>Jalankan optimasi</button></div>
+        <div class="bt-optrow"><span class="bt-combos">${this.comboText()}</span><button type="button" class="primary" data-act="optimize"${this.running ? ' disabled' : ''}>Run optimisation</button></div>
       </section>
       ${this.optResultsHtml()}`
   }
@@ -801,8 +801,8 @@ export class BacktestUI {
     if (!f) return
     const [v1, v2] = this.combos()
     const n = v1.length * (v2 ? v2.length : 1)
-    if (!n) return toast('Rentang parameter tidak valid.', 'bad')
-    if (n > MAX_COMBOS) return toast(`Terlalu banyak kombinasi (${n}). Maksimal ${MAX_COMBOS}: perbesar langkah.`, 'bad')
+    if (!n) return toast('Invalid parameter range.', 'bad')
+    if (n > MAX_COMBOS) return toast(`Too many combinations (${n}). The maximum is ${MAX_COMBOS}: use a bigger step.`, 'bad')
     const params = listParams(this.spec)
     const name = (id: string) => params.find((p) => p.id === id)?.label.replace(/\s*\([^)]*\)$/, '') ?? id
     const specs: StrategySpec[] = []
@@ -815,7 +815,7 @@ export class BacktestUI {
         labels.push([a, b])
       }
     this.opt = { rows: [], specs, labels, names: [name(f.p1), f.p2 ? name(f.p2) : null], isEnd: 0 }
-    this.setRunning(true, 'Mulai optimasi…')
+    this.setRunning(true, 'Starting optimisation…')
     this.post({ id: ++this.jobId, kind: 'optimize', specs, split: SPLIT, zone: this.o.zone(), top: 5, symbol: current().symbol })
   }
 
@@ -825,10 +825,10 @@ export class BacktestUI {
     const best = o.rows[0]
     const warn: string[] = []
     if (best.is.net > 0 && best.oos && best.oos.net < 0)
-      warn.push('<li class="bad">Parameter terbaik untung di data latih tapi rugi di data uji. Ini tanda overfitting: hasilnya kebetulan cocok dengan masa lalu.</li>')
-    if (best.is.trades < 30) warn.push(`<li class="warn">Kombinasi terbaik cuma ${best.is.trades} trade di data latih. Sampel terlalu kecil.</li>`)
+      warn.push('<li class="bad">The best parameters win on the training data but lose on the test data. That is overfitting: they just happen to fit the past.</li>')
+    if (best.is.trades < 30) warn.push(`<li class="warn">The best combination has only ${best.is.trades} trades in the training data. The sample is too small.</li>`)
     warn.push(
-      `<li>Makin banyak kombinasi dicoba (${o.rows.length}), makin besar peluang hasil terbaik cuma kebetulan. Pilih parameter yang untung di data uji dan tetangganya juga untung, bukan yang paling tinggi sendirian.</li>`,
+      `<li>The more combinations you try (${o.rows.length}), the more likely the best one is luck. Pick parameters that win on the test data and whose neighbours win too, not the single highest.</li>`,
     )
     const z = this.hourOf()
     const rows = o.rows
@@ -837,15 +837,15 @@ export class BacktestUI {
         return `<tr><td>${rank + 1}</td><td>${a}</td>${o.names[1] ? `<td>${b}</td>` : ''}<td>${r.is.trades}</td><td>${pct(r.is.winRate)}</td>
           <td>${num(r.is.profitFactor)}</td><td class="neg">${pct(-r.is.maxDdPct)}</td><td class="${cls(r.is.net)}">${usd(r.is.net, true)}</td>
           <td class="${r.oos ? cls(r.oos.net) : ''}">${r.oos ? `${usd(r.oos.net, true)} <small>(${r.oos.trades})</small>` : ''}</td>
-          <td><button type="button" class="bt-link" data-act="apply" data-i="${r.index}">Pakai</button></td></tr>`
+          <td><button type="button" class="bt-link" data-act="apply" data-i="${r.index}">Use</button></td></tr>`
       })
       .join('')
     return `<section class="bt-card bt-wide">
-      <h4>Hasil (urut net profit data latih)</h4>
-      <p class="bt-hint">Data latih sampai ${z.date(o.isEnd)}; data uji sesudahnya. Data uji dihitung untuk 5 teratas.</p>
+      <h4>Results (sorted by training net profit)</h4>
+      <p class="bt-hint">Training data until ${z.date(o.isEnd)}; test data after that. The test is run for the top 5.</p>
       <ul class="bt-notes">${warn.join('')}</ul>
       <div class="bt-scroll bt-trades"><table class="bt-table"><thead><tr><th>#</th><th>${esc(o.names[0])}</th>${o.names[1] ? `<th>${esc(o.names[1])}</th>` : ''}
-        <th>Trade</th><th>Win</th><th>PF</th><th>DD</th><th>Net latih</th><th>Net uji (trade)</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+        <th>Trades</th><th>Win</th><th>PF</th><th>DD</th><th>Training net</th><th>Test net (trades)</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
     </section>`
   }
 
@@ -854,19 +854,19 @@ export class BacktestUI {
   private compareHtml(): string {
     const A = this.saved
     const B = this.report
-    if (!A) return '<p class="bt-empty">Jalankan backtest, lalu di tab Hasil klik <b>Simpan sebagai A</b>. Ubah strategi, jalankan lagi, dan bandingkan di sini.</p>'
+    if (!A) return '<p class="bt-empty">Run a backtest, then click <b>Save as A</b> in the Results tab. Change the strategy, run it again and compare here.</p>'
     const z = this.hourOf()
     const rows: [string, (m: Metrics) => string, (m: Metrics) => number][] = [
       ['Net profit', (m) => usd(m.net, true), (m) => m.net],
       ['Return', (m) => pct(m.netPct, true), (m) => m.netPct],
-      ['Trade', (m) => String(m.trades), () => 0],
+      ['Trades', (m) => String(m.trades), () => 0],
       ['Win rate', (m) => pct(m.winRate), (m) => m.winRate],
       ['Profit factor', (m) => num(m.profitFactor), (m) => (Number.isFinite(m.profitFactor) ? m.profitFactor : 1e9)],
       ['Max drawdown', (m) => pct(-m.maxDdPct), (m) => -m.maxDdPct],
-      ['Rata-rata R', (m) => (Number.isFinite(m.avgR) ? num(m.avgR) + 'R' : '–'), (m) => (Number.isFinite(m.avgR) ? m.avgR : -1e9)],
+      ['Average R', (m) => (Number.isFinite(m.avgR) ? num(m.avgR) + 'R' : '–'), (m) => (Number.isFinite(m.avgR) ? m.avgR : -1e9)],
       ['Expectancy', (m) => usd(m.expectancy, true), (m) => m.expectancy],
       ['Sharpe', (m) => num(m.sharpe), (m) => (Number.isFinite(m.sharpe) ? m.sharpe : -1e9)],
-      ['Kalah beruntun', (m) => String(m.maxLossStreak), (m) => -m.maxLossStreak],
+      ['Losing streak', (m) => String(m.maxLossStreak), (m) => -m.maxLossStreak],
     ]
     const body = rows
       .map(([label, f, score]) => {
@@ -876,13 +876,13 @@ export class BacktestUI {
       .join('')
     return `<div class="bt-cols">
       <section class="bt-card bt-wide">
-        <table class="bt-table bt-cmp"><thead><tr><th></th><th><i class="sw a"></i>A (tersimpan)</th><th><i class="sw b"></i>B (hasil terakhir)</th></tr></thead>
-        <tbody><tr><td>Strategi</td><td>${esc(describe(A.spec))}</td><td>${B ? esc(describe(B.spec)) : '–'}</td></tr>
-        <tr><td>Rentang</td><td>${z.date(A.from)} s/d ${z.date(A.to)}</td><td>${B ? `${z.date(B.from)} s/d ${z.date(B.to)}` : '–'}</td></tr>${body}</tbody></table>
-        <p class="bt-hint">Bandingkan di rentang tanggal yang sama supaya adil. Yang lebih baik ditandai.</p>
-        <button type="button" data-act="clearA">Hapus A</button>
+        <table class="bt-table bt-cmp"><thead><tr><th></th><th><i class="sw a"></i>A (saved)</th><th><i class="sw b"></i>B (latest result)</th></tr></thead>
+        <tbody><tr><td>Strategy</td><td>${esc(describe(A.spec))}</td><td>${B ? esc(describe(B.spec)) : '–'}</td></tr>
+        <tr><td>Range</td><td>${z.date(A.from)} to ${z.date(A.to)}</td><td>${B ? `${z.date(B.from)} to ${z.date(B.to)}` : '–'}</td></tr>${body}</tbody></table>
+        <p class="bt-hint">Compare over the same date range to be fair. The better one is marked.</p>
+        <button type="button" data-act="clearA">Clear A</button>
       </section>
-      <section class="bt-card bt-wide"><h4>Kurva equity</h4><div class="bt-canvas"><canvas data-curve="compare" aria-label="Kurva equity A dan B"></canvas></div></section>
+      <section class="bt-card bt-wide"><h4>Equity curve</h4><div class="bt-canvas"><canvas data-curve="compare" aria-label="Equity curves A and B"></canvas></div></section>
     </div>`
   }
 

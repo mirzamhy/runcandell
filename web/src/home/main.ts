@@ -157,7 +157,7 @@ function loginPane(p: Pane, focus = true) {
   loginErr.hidden = true
   if (focus) panes[p].querySelector('input')?.focus()
 }
-for (const b of document.querySelectorAll<HTMLButtonElement>('#daftar [data-to]')) b.addEventListener('click', () => loginPane(b.dataset.to as Pane))
+for (const b of document.querySelectorAll<HTMLButtonElement>('#join [data-to]')) b.addEventListener('click', () => loginPane(b.dataset.to as Pane))
 for (const a of document.querySelectorAll<HTMLAnchorElement>('a[data-pane]')) a.addEventListener('click', () => loginPane(a.dataset.pane as Pane, false))
 
 // returning visitors see "Masuk" first, new ones "Daftar"
@@ -172,20 +172,20 @@ const firstPane = (): Pane => (knownDevice() ? 'login' : 'register')
 loginPane(firstPane(), false)
 
 // show / hide password
-for (const eye of document.querySelectorAll<HTMLButtonElement>('#daftar .eye')) {
+for (const eye of document.querySelectorAll<HTMLButtonElement>('#join .eye')) {
   eye.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>'
   eye.addEventListener('click', () => {
     const input = eye.parentElement!.querySelector('input')!
     const show = input.type === 'password'
     input.type = show ? 'text' : 'password'
     eye.setAttribute('aria-pressed', String(show))
-    eye.setAttribute('aria-label', show ? 'Sembunyikan password' : 'Tampilkan password')
+    eye.setAttribute('aria-label', show ? 'Hide password' : 'Show password')
     input.focus()
   })
 }
 
 const showErr = (e: unknown) => {
-  loginErr.textContent = e instanceof ApiError ? e.message : 'Gagal. Coba lagi.'
+  loginErr.textContent = e instanceof ApiError ? e.message : 'Something went wrong. Try again.'
   loginErr.hidden = false
 }
 
@@ -230,14 +230,14 @@ on('guest', async (f) => {
   box.hidden = false // laid out before Google measures the button
   void mountGoogleButton($('g-link'), (credential) => {
     void api.google(credential).then(() => {
-      box.innerHTML = '<p class="ok">Google tertaut. Kode di atas tetap bisa dipakai sebagai cadangan.</p>'
+      box.innerHTML = '<p class="ok">Google linked. The code above still works as a backup.</p>'
     }, showErr)
   }).then((ok) => (box.hidden = !ok))
 })
 $('code-copy').addEventListener('click', () => {
   void navigator.clipboard.writeText($('code-value').textContent ?? '').then(
-    () => ($('code-copy').textContent = 'Tersalin'),
-    () => ($('code-copy').textContent = 'Salin manual (blok teksnya)'),
+    () => ($('code-copy').textContent = 'Copied'),
+    () => ($('code-copy').textContent = 'Copy it by hand (select the text)'),
   )
 })
 $('code-done').addEventListener('click', () => {
@@ -296,24 +296,24 @@ function renderStats(s: Stats | null) {
   const m = s?.me
   const cell = (v: string, label: string, cls = '') => `<div class="stat"><b class="${cls}">${v}</b><span>${label}</span></div>`
   $('stats').innerHTML = m
-    ? cell(fmtR(m.totalR), 'Total R semua duel', tone(m.totalR)) +
-      cell(m.winRate === null ? '–' : `${Math.round(m.winRate * 100)}%`, `Win rate (${m.trades} trade)`) +
-      cell(String(m.duels), 'Duel selesai') +
-      cell(m.rank ? `#${m.rank}` : '–', 'Peringkat 7 hari')
-    : '<p class="empty">Statistik belum bisa dimuat.</p>'
-  $('me-rank').textContent = m?.rank ? `Peringkat #${m.rank}` : 'Tamu'
+    ? cell(fmtR(m.totalR), 'Total R, all duels', tone(m.totalR)) +
+      cell(m.winRate === null ? '–' : `${Math.round(m.winRate * 100)}%`, `Win rate (${m.trades} trades)`) +
+      cell(String(m.duels), 'Duels finished') +
+      cell(m.rank ? `#${m.rank}` : '–', '7-day rank')
+    : '<p class="empty">Stats could not be loaded.</p>'
+  $('me-rank').textContent = m?.rank ? `Rank #${m.rank}` : 'Guest'
   const board = s?.board ?? []
   $('lb').innerHTML = board.length
     ? board
         .map(
           (x) =>
-            `<li class="${x.me ? 'me' : ''}"><span>${x.rank}</span><span>${esc(x.nickname)}</span><span class="n">${x.duels} duel</span><span class="r ${tone(x.totalR)}">${fmtR(x.totalR)}</span></li>`,
+            `<li class="${x.me ? 'me' : ''}"><span>${x.rank}</span><span>${esc(x.nickname)}</span><span class="n">${x.duels} ${x.duels === 1 ? 'duel' : 'duels'}</span><span class="r ${tone(x.totalR)}">${fmtR(x.totalR)}</span></li>`,
         )
         .join('') +
       (m?.rank && m.rank > 10 && m.weekR !== null
         ? `<li class="me"><span>${m.rank}</span><span>${esc($('me-name').textContent ?? '')}</span><span class="n"></span><span class="r ${tone(m.weekR)}">${fmtR(m.weekR)}</span></li>`
         : '')
-    : '<li class="empty">Belum ada duel selesai minggu ini. Jadi yang pertama.</li>'
+    : '<li class="empty">No finished duels this week yet. Be the first.</li>'
 }
 
 function renderActive(items: DuelListItem[]) {
@@ -321,8 +321,8 @@ function renderActive(items: DuelListItem[]) {
   $('active').hidden = !open.length
   $('active-list').innerHTML = open
     .map((d) => {
-      const vs = d.mode === 'solo' ? 'Solo' : d.players.length < 2 ? 'Menunggu lawan' : `vs ${esc(d.players.map((p) => p.nickname).join(' / '))}`
-      return `<li><a href="/duel.html?code=${d.code}"><span><b>${d.code}</b> · ${vs}</span><span class="meta">Ronde ${d.nextRound}/${d.rounds} · lanjut</span></a></li>`
+      const vs = d.mode === 'solo' ? 'Solo' : d.players.length < 2 ? 'Waiting for an opponent' : `vs ${esc(d.players.map((p) => p.nickname).join(' / '))}`
+      return `<li><a href="/duel.html?code=${d.code}"><span><b>${d.code}</b> · ${vs}</span><span class="meta">Round ${d.nextRound}/${d.rounds} · continue</span></a></li>`
     })
     .join('')
 }
@@ -341,7 +341,7 @@ async function enter(user: User) {
     return
   }
   $('me-name').textContent = user.nickname
-  $('greet').textContent = `Selamat datang, ${user.nickname}`
+  $('greet').textContent = `Welcome, ${user.nickname}`
   show('dash')
   const [stats, list] = await Promise.allSettled([statsApi.get(), duelApi.list()])
   renderStats(stats.status === 'fulfilled' ? stats.value : null)

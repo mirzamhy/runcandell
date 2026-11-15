@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="id">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -20,7 +20,7 @@
       <div class="intro-slot" id="intro-slot"><div class="intro-eyes" id="intro-eyes"></div></div>
       <p class="intro-welcome" id="intro-welcome"><span class="glitch" data-text="WELCOME">WELCOME</span></p>
       <p class="intro-arena" id="intro-arena"><span class="glitch" data-text="TO ARENA">TO ARENA</span></p>
-      <button type="button" class="intro-skip" id="intro-skip">Lewati intro</button>
+      <button type="button" class="intro-skip" id="intro-skip">Skip intro</button>
     </div>
 
     <!-- ============ LANDING + SIGN UP ============ -->
@@ -28,9 +28,9 @@
       <header class="topnav">
         <a class="brand" href="/"><span class="logo"></span>duelcandle</a>
         <nav>
-          <a href="#fitur">Fitur</a>
-          <a href="#cara">Cara main</a>
-          <a class="btn ghost sm" href="#daftar" data-pane="register">Buat akun</a>
+          <a href="#features">Features</a>
+          <a href="#how">How it works</a>
+          <a class="btn ghost sm" href="#join" data-pane="register">Sign up</a>
         </nav>
       </header>
 
@@ -38,96 +38,96 @@
         <div class="hero">
           <div class="mask-slot" id="slot-login"><span class="mask-fallback"></span></div>
           <h1 class="arena">duelcandle</h1>
-          <p class="tagline">Belajar baca chart emas lewat duel. Potongan chart XAUUSD asli, satu keputusan, skor dalam R.</p>
+          <p class="tagline">Learn to read charts by dueling. Real gold, forex, Nasdaq and Bitcoin chart slices, one decision, scored in R.</p>
         </div>
 
-        <section class="card" id="daftar">
-          <div class="tabs" role="tablist" id="auth-tabs" aria-label="Masuk atau daftar">
-            <button type="button" role="tab" data-to="login" aria-selected="true">Masuk</button>
-            <button type="button" role="tab" data-to="register" aria-selected="false">Daftar</button>
+        <section class="card" id="join">
+          <div class="tabs" role="tablist" id="auth-tabs" aria-label="Sign in or sign up">
+            <button type="button" role="tab" data-to="login" aria-selected="true">Sign in</button>
+            <button type="button" role="tab" data-to="register" aria-selected="false">Sign up</button>
           </div>
           <div class="g-login" id="g-login" hidden>
             <div class="g-btn" id="g-btn"></div>
-            <p class="or">atau pakai email</p>
+            <p class="or">or use email</p>
           </div>
           <form id="login-form" class="stack">
-            <label>Email atau nickname<input name="login" autocomplete="username" spellcheck="false" autocapitalize="off" required /></label>
-            <label class="pw">Password<input name="password" type="password" autocomplete="current-password" required /><button type="button" class="eye" aria-label="Tampilkan password" aria-pressed="false"></button></label>
-            <button class="btn primary" type="submit">Masuk arena</button>
-            <p class="alt">Akun tamu tanpa email? <button class="link" type="button" data-to="recover">Masuk pakai kode pemulihan</button></p>
+            <label>Email or nickname<input name="login" autocomplete="username" spellcheck="false" autocapitalize="off" required /></label>
+            <label class="pw">Password<input name="password" type="password" autocomplete="current-password" required /><button type="button" class="eye" aria-label="Show password" aria-pressed="false"></button></label>
+            <button class="btn primary" type="submit">Enter the arena</button>
+            <p class="alt">Guest account without email? <button class="link" type="button" data-to="recover">Sign in with a recovery code</button></p>
           </form>
           <form id="register-form" class="stack" hidden>
-            <label>Nickname<input name="nickname" autocomplete="nickname" placeholder="contoh: goldhunter" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]{3,20}" required /></label>
-            <small class="hint">Tampil di arena dan leaderboard. 3–20 karakter: huruf, angka, _</small>
+            <label>Nickname<input name="nickname" autocomplete="nickname" placeholder="e.g. goldhunter" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]{3,20}" required /></label>
+            <small class="hint">Shown in the arena and on the leaderboard. 3–20 characters: letters, numbers, _</small>
             <label>Email<input name="email" type="email" autocomplete="email" spellcheck="false" autocapitalize="off" required /></label>
-            <label class="pw">Password<input name="password" type="password" autocomplete="new-password" minlength="8" maxlength="200" required /><button type="button" class="eye" aria-label="Tampilkan password" aria-pressed="false"></button></label>
-            <small class="hint">Minimal 8 karakter.</small>
-            <button class="btn primary" type="submit">Buat akun &amp; masuk arena</button>
-            <p class="alt">Cuma mau coba? <button class="link" type="button" data-to="guest">Main sebagai tamu</button></p>
+            <label class="pw">Password<input name="password" type="password" autocomplete="new-password" minlength="8" maxlength="200" required /><button type="button" class="eye" aria-label="Show password" aria-pressed="false"></button></label>
+            <small class="hint">At least 8 characters.</small>
+            <button class="btn primary" type="submit">Create account &amp; enter</button>
+            <p class="alt">Just looking? <button class="link" type="button" data-to="guest">Play as a guest</button></p>
           </form>
           <form id="guest-form" class="stack" hidden>
-            <h2>Akun tamu</h2>
-            <p>Cukup nickname. Kamu dapat kode pemulihan untuk masuk lagi dari perangkat lain; email dan password bisa ditambah nanti.</p>
-            <label>Nickname<input name="nickname" autocomplete="nickname" placeholder="contoh: goldhunter" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]{3,20}" required /></label>
-            <button class="btn primary" type="submit">Masuk sebagai tamu</button>
-            <p class="alt"><button class="link" type="button" data-to="register">← Daftar pakai email</button></p>
+            <h2>Guest account</h2>
+            <p>Just a nickname. You get a recovery code to sign in from other devices; you can add an email and password later.</p>
+            <label>Nickname<input name="nickname" autocomplete="nickname" placeholder="e.g. goldhunter" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]{3,20}" required /></label>
+            <button class="btn primary" type="submit">Continue as guest</button>
+            <p class="alt"><button class="link" type="button" data-to="register">← Sign up with email</button></p>
           </form>
           <form id="recover-form" class="stack" hidden>
-            <h2>Kode pemulihan</h2>
-            <p>Tempel kode yang kamu simpan waktu membuat akun tamu.</p>
-            <label>Kode pemulihan<input name="code" autocomplete="off" spellcheck="false" placeholder="rc-…" required /></label>
-            <button class="btn primary" type="submit">Masuk</button>
-            <p class="alt"><button class="link" type="button" data-to="login">← Masuk pakai email</button></p>
+            <h2>Recovery code</h2>
+            <p>Paste the code you saved when you created your guest account.</p>
+            <label>Recovery code<input name="code" autocomplete="off" spellcheck="false" placeholder="rc-…" required /></label>
+            <button class="btn primary" type="submit">Sign in</button>
+            <p class="alt"><button class="link" type="button" data-to="login">← Sign in with email</button></p>
           </form>
           <form id="gnick-form" class="stack" hidden>
-            <h2>Satu langkah lagi</h2>
-            <p>Pilih nickname untuk arena. Nama asli dan email Google tidak ditampilkan ke pemain lain.</p>
+            <h2>One more step</h2>
+            <p>Pick an arena nickname. Your real name and Google email are never shown to other players.</p>
             <label>Nickname<input name="nickname" autocomplete="nickname" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]{3,20}" required /></label>
-            <small class="hint">3–20 karakter: huruf, angka, _</small>
-            <button class="btn primary" type="submit">Masuk arena</button>
-            <p class="alt"><button class="link" type="button" data-to="login">Batal</button></p>
+            <small class="hint">3–20 characters: letters, numbers, _</small>
+            <button class="btn primary" type="submit">Enter the arena</button>
+            <p class="alt"><button class="link" type="button" data-to="login">Cancel</button></p>
           </form>
           <div id="code-box" class="stack" hidden>
-            <h2>Simpan kode ini</h2>
-            <p>Ini cara masuk lagi dari perangkat lain. Kode cuma tampil sekali.</p>
+            <h2>Save this code</h2>
+            <p>It signs you in from other devices. It is shown only once.</p>
             <code class="code" id="code-value"></code>
-            <button class="btn ghost" type="button" id="code-copy">Salin kode</button>
+            <button class="btn ghost" type="button" id="code-copy">Copy code</button>
             <div class="g-link" id="g-link-box" hidden>
-              <p class="or">atau tanpa kode</p>
-              <p>Tautkan akun Google: dari perangkat lain cukup masuk dengan Google.</p>
+              <p class="or">or skip the code</p>
+              <p>Link your Google account: on other devices just sign in with Google.</p>
               <div class="g-btn" id="g-link"></div>
             </div>
-            <button class="btn primary" type="button" id="code-done">Sudah saya simpan, masuk</button>
+            <button class="btn primary" type="button" id="code-done">Saved it, let me in</button>
           </div>
           <p class="err" id="login-err" role="alert" hidden></p>
-          <a class="skip" href="/chart.html">Lihat chart dulu tanpa akun</a>
+          <a class="skip" href="/chart.html">Browse the chart without an account</a>
         </section>
       </section>
 
-      <section class="sect" id="fitur">
-        <p class="eyebrow">Fitur</p>
-        <h2>Satu arena, banyak cara latihan</h2>
+      <section class="sect" id="features">
+        <p class="eyebrow">Features</p>
+        <h2>One arena, many ways to practise</h2>
         <div class="feats">
-          <article class="feat hot"><svg viewBox="0 0 24 24"><path d="M4 20 14 10M10 4l6 6M20 20 10 10M14 4 8 10" /></svg><h3>Duel</h3><p>Potongan chart tanpa tanggal dan harga asli. Buy, sell, atau skip sebelum waktu habis. Lawan teman lewat kode atau latihan solo.</p></article>
-          <article class="feat"><svg viewBox="0 0 24 24"><path d="M6 4v16M6 8H4v6h2M12 6v14M12 9h2v5h-2M18 3v15M18 6h2v7h-2" /></svg><h3>Chart &amp; replay</h3><p>Chart M1 sampai D1, indikator, alat gambar, dan bar replay dengan trading simulasi.</p></article>
-          <article class="feat"><svg viewBox="0 0 24 24"><path d="M3 16h18M5 13l3-4 3 2 4-6" /></svg><h3>Backtest &amp; jurnal</h3><p>Uji strategi otomatis di data setahun, simpan trade ke jurnal lengkap dengan screenshot.</p></article>
-          <article class="feat"><svg viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4" /></svg><h3>Leaderboard</h3><p>Total R dari duel 7 hari terakhir. Hasil lawan baru terbuka setelah duel selesai.</p></article>
-          <article class="feat locked"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg><h3>Materi</h3><p>Modul belajar dari dasar. Segera hadir.</p></article>
+          <article class="feat hot"><svg viewBox="0 0 24 24"><path d="M4 20 14 10M10 4l6 6M20 20 10 10M14 4 8 10" /></svg><h3>Duel</h3><p>Chart slices with the date and real price hidden. Buy, sell or skip before time runs out. Challenge a friend with a code or practise solo.</p></article>
+          <article class="feat"><svg viewBox="0 0 24 24"><path d="M6 4v16M6 8H4v6h2M12 6v14M12 9h2v5h-2M18 3v15M18 6h2v7h-2" /></svg><h3>Chart &amp; replay</h3><p>M1 to D1 charts, indicators, drawing tools and bar replay with paper trading.</p></article>
+          <article class="feat"><svg viewBox="0 0 24 24"><path d="M3 16h18M5 13l3-4 3 2 4-6" /></svg><h3>Backtest &amp; journal</h3><p>Test automated strategies on 5 years of data and keep trades in a journal with screenshots.</p></article>
+          <article class="feat"><svg viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4" /></svg><h3>Leaderboard</h3><p>Total R from the last 7 days of duels. Your opponent’s result opens only once the duel is over.</p></article>
+          <article class="feat locked"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg><h3>Lessons</h3><p>Learning modules from the basics. Coming soon.</p></article>
         </div>
       </section>
 
-      <section class="sect" id="cara">
-        <p class="eyebrow">Cara main</p>
-        <h2>Tiga langkah ke arena</h2>
+      <section class="sect" id="how">
+        <p class="eyebrow">How it works</p>
+        <h2>Three steps to the arena</h2>
         <ol class="steps">
-          <li><b>1</b><h3>Buat akun</h3><p>Daftar pakai Google atau email, pilih nickname arena.</p></li>
-          <li><b>2</b><h3>Mulai duel</h3><p>Analisa potongan chart, pasang SL dan TP, kunci keputusan.</p></li>
-          <li><b>3</b><h3>Lihat hasil</h3><p>Chart berjalan, skor R keluar, peringkat naik.</p></li>
+          <li><b>1</b><h3>Create an account</h3><p>Sign up with Google or email and pick an arena nickname.</p></li>
+          <li><b>2</b><h3>Start a duel</h3><p>Read the chart slice, set SL and TP, lock in your decision.</p></li>
+          <li><b>3</b><h3>See the result</h3><p>The chart plays on, your R score comes out, you climb the ranks.</p></li>
         </ol>
-        <a class="btn primary" href="#daftar" data-pane="register">Buat akun sekarang</a>
+        <a class="btn primary" href="#join" data-pane="register">Create an account</a>
       </section>
 
-      <footer class="foot">duelcandle · data XAUUSD dari MT5 · gratis untuk belajar, bukan saran investasi</footer>
+      <footer class="foot">duelcandle · market data from MT5 · free for learning, not investment advice</footer>
     </main>
 
     <!-- ============ DASHBOARD ============ -->
@@ -138,26 +138,26 @@
           <a class="nav on" href="/duel.html"><svg viewBox="0 0 24 24"><path d="M4 20 14 10M10 4l6 6M20 20 10 10M14 4 8 10" /></svg><span>Duel</span></a>
           <a class="nav" href="/chart.html"><svg viewBox="0 0 24 24"><path d="M6 4v16M6 8H4v6h2M12 6v14M12 9h2v5h-2M18 3v15M18 6h2v7h-2" /></svg><span>Chart</span></a>
           <a class="nav" href="#board"><svg viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4" /></svg><span>Leaderboard</span></a>
-          <span class="nav locked" aria-disabled="true" title="Segera hadir"><svg viewBox="0 0 24 24"><path d="M4 5h6a2 2 0 0 1 2 2v13a2 2 0 0 0-2-2H4zM20 5h-6a2 2 0 0 0-2 2v13a2 2 0 0 1 2-2h6z" /></svg><span>Materi</span><svg class="lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg></span>
+          <span class="nav locked" aria-disabled="true" title="Coming soon"><svg viewBox="0 0 24 24"><path d="M4 5h6a2 2 0 0 1 2 2v13a2 2 0 0 0-2-2H4zM20 5h-6a2 2 0 0 0-2 2v13a2 2 0 0 1 2-2h6z" /></svg><span>Lessons</span><svg class="lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg></span>
         </nav>
         <div class="me">
           <span class="avatar"></span>
-          <div><b id="me-name"></b><span id="me-rank">Tamu</span></div>
-          <button class="logout" id="logout" title="Keluar" aria-label="Keluar"><svg viewBox="0 0 24 24"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10" /></svg></button>
+          <div><b id="me-name"></b><span id="me-rank">Guest</span></div>
+          <button class="logout" id="logout" title="Sign out" aria-label="Sign out"><svg viewBox="0 0 24 24"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10" /></svg></button>
         </div>
       </aside>
 
       <section class="dmain">
         <header class="dhero">
           <div>
-            <p class="kicker" id="greet">Selamat datang</p>
+            <p class="kicker" id="greet">Welcome</p>
             <h1>Candle Duel</h1>
-            <p>Potongan chart XAUUSD asli, waktu analisa terbatas, satu keputusan. Lawan teman lewat kode atau latihan sendiri.</p>
+            <p>Real chart slices, limited analysis time, one decision. Challenge a friend with a code or practise alone.</p>
             <div class="acts">
-              <a class="btn primary" href="/duel.html">Mulai duel</a>
+              <a class="btn primary" href="/duel.html">Start a duel</a>
               <form class="join" id="join-form">
-                <input name="code" placeholder="Kode duel" maxlength="8" autocomplete="off" spellcheck="false" aria-label="Kode duel" required />
-                <button class="btn ghost" type="submit">Gabung</button>
+                <input name="code" placeholder="Duel code" maxlength="8" autocomplete="off" spellcheck="false" aria-label="Duel code" required />
+                <button class="btn ghost" type="submit">Join</button>
               </form>
             </div>
           </div>
@@ -165,24 +165,24 @@
         </header>
 
         <div class="tiles">
-          <a class="tile duel" href="/duel.html"><svg class="ic" viewBox="0 0 24 24"><path d="M4 20 14 10M10 4l6 6M20 20 10 10M14 4 8 10" /></svg><b>Duel</b><span>Solo atau async 1 lawan 1</span></a>
-          <a class="tile" href="/chart.html"><svg class="ic" viewBox="0 0 24 24"><path d="M6 4v16M6 8H4v6h2M12 6v14M12 9h2v5h-2M18 3v15M18 6h2v7h-2" /></svg><b>Chart</b><span>Replay, trading simulasi, backtest, jurnal</span></a>
-          <a class="tile" href="#board"><svg class="ic" viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4" /></svg><b>Leaderboard</b><span>Total R duel 7 hari terakhir</span></a>
-          <span class="tile locked" aria-disabled="true"><svg class="lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg><svg class="ic" viewBox="0 0 24 24"><path d="M4 5h6a2 2 0 0 1 2 2v13a2 2 0 0 0-2-2H4zM20 5h-6a2 2 0 0 0-2 2v13a2 2 0 0 1 2-2h6z" /></svg><b>Materi</b><span>Terkunci · segera hadir</span></span>
+          <a class="tile duel" href="/duel.html"><svg class="ic" viewBox="0 0 24 24"><path d="M4 20 14 10M10 4l6 6M20 20 10 10M14 4 8 10" /></svg><b>Duel</b><span>Solo or async 1 vs 1</span></a>
+          <a class="tile" href="/chart.html"><svg class="ic" viewBox="0 0 24 24"><path d="M6 4v16M6 8H4v6h2M12 6v14M12 9h2v5h-2M18 3v15M18 6h2v7h-2" /></svg><b>Chart</b><span>Replay, paper trading, backtest, journal</span></a>
+          <a class="tile" href="#board"><svg class="ic" viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4" /></svg><b>Leaderboard</b><span>Total R, last 7 days</span></a>
+          <span class="tile locked" aria-disabled="true"><svg class="lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg><svg class="ic" viewBox="0 0 24 24"><path d="M4 5h6a2 2 0 0 1 2 2v13a2 2 0 0 0-2-2H4zM20 5h-6a2 2 0 0 0-2 2v13a2 2 0 0 1 2-2h6z" /></svg><b>Lessons</b><span>Locked · coming soon</span></span>
         </div>
 
         <section class="panel" id="active" hidden>
-          <h3>Duel yang belum selesai</h3>
+          <h3>Unfinished duels</h3>
           <ul class="active-list" id="active-list"></ul>
         </section>
 
         <div class="row">
           <section class="panel">
-            <h3>Rekor kamu</h3>
+            <h3>Your record</h3>
             <div class="stats" id="stats"></div>
           </section>
           <section class="panel" id="board">
-            <h3>Leaderboard 7 hari</h3>
+            <h3>7-day leaderboard</h3>
             <ol class="lb" id="lb"></ol>
           </section>
         </div>

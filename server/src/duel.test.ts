@@ -86,7 +86,7 @@ test('solo duel: snapshot has no future, server scores, timer enforced', async (
   const entry = s.cut.close + s.cut.spread
   const tooClose = await a('POST', `/api/duels/${code}/rounds/1/decide`, { side: 'buy', sl: entry - s.minStop / 2 })
   assert.equal(tooClose.status, 400)
-  assert.match(tooClose.body.error, /terlalu dekat/)
+  assert.match(tooClose.body.error, /too close/)
   const d = (await a('POST', `/api/duels/${code}/rounds/1/decide`, { side: 'buy', sl: entry - s.minStop * 2, tp: entry + s.minStop * 4 })).body
   assert.equal(d.future.length, 60, 'run window revealed after deciding')
   assert.ok(d.future[0].time > s.cut.time)

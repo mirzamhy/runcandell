@@ -32,19 +32,19 @@ test('email: register, sign in with email or nickname, wrong password refused', 
   const c = client()
   assert.equal((await c('POST', '/api/auth/login', { login: 'Budi_FX', password: 'rahasia123' })).status, 200, 'nickname works too')
   const wrong = await client()('POST', '/api/auth/login', { login: 'budi@example.com', password: 'salah12345' })
-  assert.deepEqual([wrong.status, wrong.body.error], [401, 'Email/nickname atau password salah.'])
+  assert.deepEqual([wrong.status, wrong.body.error], [401, 'Wrong email/nickname or password.'])
   const none = await client()('POST', '/api/auth/login', { login: 'nobody@example.com', password: 'whatever1' })
-  assert.deepEqual([none.status, none.body.error], [401, 'Email/nickname atau password salah.'], 'same answer: no hint that the email is unknown')
+  assert.deepEqual([none.status, none.body.error], [401, 'Wrong email/nickname or password.'], 'same answer: no hint that the email is unknown')
 })
 
 test('email: validation and duplicates', async () => {
   const a = setup()()
   const bad = async (body: object) => (await a('POST', '/api/auth/register', body)).body.error
-  assert.equal(await bad({ nickname: 'x_one', email: 'not-an-email', password: 'rahasia123' }), 'Format email tidak valid.')
-  assert.equal(await bad({ nickname: 'x_one', email: 'a@b.co', password: 'short' }), 'Password minimal 8 karakter.')
+  assert.equal(await bad({ nickname: 'x_one', email: 'not-an-email', password: 'rahasia123' }), 'Invalid email address.')
+  assert.equal(await bad({ nickname: 'x_one', email: 'a@b.co', password: 'short' }), 'The password needs at least 8 characters.')
   assert.equal((await a('POST', '/api/auth/register', { nickname: 'x_one', email: 'a@b.co', password: 'rahasia123' })).status, 201)
-  assert.match(await bad({ nickname: 'x_two', email: 'A@B.co', password: 'rahasia123' }), /Email sudah terdaftar/)
-  assert.equal(await bad({ nickname: 'X_ONE', email: 'c@d.co', password: 'rahasia123' }), 'Nickname sudah dipakai.')
+  assert.match(await bad({ nickname: 'x_two', email: 'A@B.co', password: 'rahasia123' }), /already registered/)
+  assert.equal(await bad({ nickname: 'X_ONE', email: 'c@d.co', password: 'rahasia123' }), 'That nickname is taken.')
 })
 
 test('email: guest adds a password later; changing it needs the old one and signs out other devices', async () => {

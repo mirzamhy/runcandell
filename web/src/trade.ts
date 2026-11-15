@@ -18,7 +18,7 @@ const fmtPx = (n: number | null) => (n === null ? '–' : px(n))
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
 
 const COLORS = { buy: '#4c8dff', sell: '#ef5350', sl: '#ef5350', tp: '#26a69a', pending: '#f5a524' }
-const REASON: Record<string, string> = { tp: 'TP', sl: 'SL', manual: 'Manual', stopout: 'Stop-out', signal: 'Sinyal', time: 'Waktu', end: 'Akhir data' }
+const REASON: Record<string, string> = { tp: 'TP', sl: 'SL', manual: 'Manual', stopout: 'Stop-out', signal: 'Signal', time: 'Time', end: 'End of data' }
 
 // ---------- toast ----------
 
@@ -134,9 +134,9 @@ class OrderLines {
         if (v !== null && Number.isFinite(v)) want.set(`tk:${field}`, { price: v, color, lineWidth: 1, lineStyle: LineStyle.LargeDashed, axisLabelVisible: true, title })
       }
       if (tk) {
-        tkLine('price', tk.price, COLORS.pending, 'Harga order (geser)')
-        tkLine('sl', tk.sl, COLORS.sl, 'SL tiket (geser)')
-        tkLine('tp', tk.tp, COLORS.tp, 'TP tiket (geser)')
+        tkLine('price', tk.price, COLORS.pending, 'Order price (drag)')
+        tkLine('sl', tk.sl, COLORS.sl, 'Ticket SL (drag)')
+        tkLine('tp', tk.tp, COLORS.tp, 'Ticket TP (drag)')
       }
     }
     for (const [k, l] of this.lines) {
@@ -335,7 +335,7 @@ export class TradeUI {
     const dir = (p.side === 'buy' ? 1 : -1) * (which === 'tp' ? 1 : -1)
     const v = Math.round((p.entry + dir * d) * 100) / 100
     this.act(() => acc.modifyPosition(id, which === 'sl' ? v : p.sl, which === 'tp' ? v : p.tp))
-    toast(`${which.toUpperCase()} dipasang di ${fmtPx(v)}. Geser garisnya di chart untuk mengatur.`)
+    toast(`${which.toUpperCase()} set at ${fmtPx(v)}. Drag its line on the chart to adjust.`)
   }
 
   private addOrderLevel(id: number, which: 'sl' | 'tp') {
@@ -369,19 +369,19 @@ export class TradeUI {
       const p = acc.positions.find((q) => q.id === id)
       if (!p) return
       items = [
-        p.sl === null ? { label: '+ Pasang SL', act: () => this.addLevel(id, 'sl') } : { label: 'Hapus SL', act: () => this.act(() => acc.modifyPosition(id, null, p.tp)) },
-        p.tp === null ? { label: '+ Pasang TP', act: () => this.addLevel(id, 'tp') } : { label: 'Hapus TP', act: () => this.act(() => acc.modifyPosition(id, p.sl, null)) },
+        p.sl === null ? { label: '+ Set SL', act: () => this.addLevel(id, 'sl') } : { label: 'Remove SL', act: () => this.act(() => acc.modifyPosition(id, null, p.tp)) },
+        p.tp === null ? { label: '+ Set TP', act: () => this.addLevel(id, 'tp') } : { label: 'Remove TP', act: () => this.act(() => acc.modifyPosition(id, p.sl, null)) },
         'sep',
-        { label: `Tutup ${p.side.toUpperCase()} ${p.lots.toFixed(2)}`, hint: fmtMoney(acc.positionPnl(p), true), danger: true, act: () => this.act(() => acc.closePosition(id)) },
+        { label: `Close ${p.side.toUpperCase()} ${p.lots.toFixed(2)}`, hint: fmtMoney(acc.positionPnl(p), true), danger: true, act: () => this.act(() => acc.closePosition(id)) },
       ]
     } else {
       const o = acc.orders.find((q) => q.id === id)
       if (!o) return
       items = [
-        o.sl === null ? { label: '+ Pasang SL', act: () => this.addOrderLevel(id, 'sl') } : { label: 'Hapus SL', act: () => this.act(() => acc.modifyOrder(id, o.price, null, o.tp)) },
-        o.tp === null ? { label: '+ Pasang TP', act: () => this.addOrderLevel(id, 'tp') } : { label: 'Hapus TP', act: () => this.act(() => acc.modifyOrder(id, o.price, o.sl, null)) },
+        o.sl === null ? { label: '+ Set SL', act: () => this.addOrderLevel(id, 'sl') } : { label: 'Remove SL', act: () => this.act(() => acc.modifyOrder(id, o.price, null, o.tp)) },
+        o.tp === null ? { label: '+ Set TP', act: () => this.addOrderLevel(id, 'tp') } : { label: 'Remove TP', act: () => this.act(() => acc.modifyOrder(id, o.price, o.sl, null)) },
         'sep',
-        { label: 'Batalkan order', danger: true, act: () => this.act(() => acc.cancelOrder(id)) },
+        { label: 'Cancel order', danger: true, act: () => this.act(() => acc.cancelOrder(id)) },
       ]
     }
     openMenu(x, y, items)
@@ -408,7 +408,7 @@ export class TradeUI {
   }
 
   private onEvent(e: AccountEvent) {
-    if (e.kind === 'open' && e.fromOrder) toast(`Order ${e.pos.side.toUpperCase()} ${e.fromOrder.type} terisi di ${fmtPx(e.pos.entry)}`)
+    if (e.kind === 'open' && e.fromOrder) toast(`${e.pos.side.toUpperCase()} ${e.fromOrder.type} order filled at ${fmtPx(e.pos.entry)}`)
     if (e.kind === 'close' && e.trade.reason !== 'manual') {
       const t = e.trade
       toast(`${REASON[t.reason]} ${t.side.toUpperCase()} ${t.lots.toFixed(2)}: ${fmtMoney(t.pnl, true)}`, t.pnl >= 0 ? 'good' : 'bad')
@@ -421,20 +421,20 @@ export class TradeUI {
     const r = this.o.root
     r.innerHTML = `
       <section class="acct">
-        <div><span class="k">Saldo</span><b data-f="balance"></b></div>
+        <div><span class="k">Balance</span><b data-f="balance"></b></div>
         <div><span class="k">Equity</span><b data-f="equity"></b></div>
-        <div><span class="k">P/L berjalan</span><b data-f="floating"></b></div>
-        <div><span class="k">Margin bebas</span><b data-f="free"></b></div>
+        <div><span class="k">Floating P/L</span><b data-f="floating"></b></div>
+        <div><span class="k">Free margin</span><b data-f="free"></b></div>
       </section>
       <form class="ticket" data-f="ticket" novalidate>
         <div class="row">
           <label><span>Lot</span><input name="lots" type="number" min="0.01" max="100" step="0.01" value="0.10" inputmode="decimal"></label>
-          <label><span>Tipe</span><select name="type"><option value="market">Market</option><option value="limit">Limit</option><option value="stop">Stop</option></select></label>
+          <label><span>Type</span><select name="type"><option value="market">Market</option><option value="limit">Limit</option><option value="stop">Stop</option></select></label>
         </div>
-        <label class="price-row" hidden><span>Harga order</span><input name="price" type="number" step="${pxStep()}" inputmode="decimal"></label>
+        <label class="price-row" hidden><span>Order price</span><input name="price" type="number" step="${pxStep()}" inputmode="decimal"></label>
         <div class="row">
-          <label><span>Stop loss</span><input name="sl" type="number" step="${pxStep()}" placeholder="opsional" inputmode="decimal"></label>
-          <label><span>Take profit</span><input name="tp" type="number" step="${pxStep()}" placeholder="opsional" inputmode="decimal"></label>
+          <label><span>Stop loss</span><input name="sl" type="number" step="${pxStep()}" placeholder="optional" inputmode="decimal"></label>
+          <label><span>Take profit</span><input name="tp" type="number" step="${pxStep()}" placeholder="optional" inputmode="decimal"></label>
         </div>
         <p class="risk" data-f="risk"></p>
         <div class="sides">
@@ -517,15 +517,15 @@ export class TradeUI {
     const tp = this.num('tp')
     const type = ((this.el.ticket as HTMLFormElement).elements.namedItem('type') as HTMLSelectElement).value
     try {
-      if ([lots, sl, tp].some((v) => Number.isNaN(v))) throw new TradeError('Isi angka yang valid.')
+      if ([lots, sl, tp].some((v) => Number.isNaN(v))) throw new TradeError('Enter valid numbers.')
       if (type === 'market') {
         const p = acc.market(side, lots, sl, tp)
-        toast(`${side.toUpperCase()} ${lots.toFixed(2)} di ${fmtPx(p.entry)}`)
+        toast(`${side.toUpperCase()} ${lots.toFixed(2)} at ${fmtPx(p.entry)}`)
       } else {
         const price = this.num('price')
-        if (price === null || Number.isNaN(price)) throw new TradeError('Isi harga order.')
+        if (price === null || Number.isNaN(price)) throw new TradeError('Enter the order price.')
         acc.pending(side, type as PendingType, lots, price, sl, tp)
-        toast(`Order ${side.toUpperCase()} ${type} ${lots.toFixed(2)} @ ${fmtPx(price)} dipasang`)
+        toast(`${side.toUpperCase()} ${type} order ${lots.toFixed(2)} @ ${fmtPx(price)} placed`)
       }
     } catch (err) {
       toast((err as Error).message, 'bad')
@@ -550,7 +550,7 @@ export class TradeUI {
     const type = ((this.el.ticket as HTMLFormElement).elements.namedItem('type') as HTMLSelectElement).value
     const priceIn = this.num('price')
     if (!lots || Number.isNaN(lots) || (sl === null && tp === null)) {
-      out.textContent = 'Isi SL untuk melihat risiko per trade.'
+      out.textContent = 'Set an SL to see the risk per trade.'
       return
     }
     const parts: string[] = []
@@ -560,13 +560,13 @@ export class TradeUI {
     const entry = entryFor(side)
     if (sl !== null && Number.isFinite(entry)) {
       const risk = -acc.pnl(side, entry, sl, lots)
-      parts.push(`Risiko ${fmtMoney(risk)} (${((risk / acc.balance) * 100).toFixed(2)}% saldo)`)
+      parts.push(`Risk ${fmtMoney(risk)} (${((risk / acc.balance) * 100).toFixed(2)}% of balance)`)
       if (tp !== null) {
         const reward = acc.pnl(side, entry, tp, lots)
         if (risk > 0) parts.push(`R:R 1:${(reward / risk).toFixed(2)}`)
       }
     } else if (tp !== null && Number.isFinite(entry)) {
-      parts.push(`Target ${fmtMoney(acc.pnl(side, entry, tp, lots))}, tanpa SL`)
+      parts.push(`Target ${fmtMoney(acc.pnl(side, entry, tp, lots))}, no SL`)
     }
     out.textContent = parts.length ? `${side.toUpperCase()}: ${parts.join(' · ')}` : ''
   }
@@ -613,9 +613,9 @@ export class TradeUI {
       const v = input.value.trim() === '' ? null : Number(input.value)
       if (!o) return
       return this.act(() => {
-        if (v !== null && !Number.isFinite(v)) throw new TradeError('Angka tidak valid.')
+        if (v !== null && !Number.isFinite(v)) throw new TradeError('Invalid number.')
         const f = input.dataset.oedit
-        if (f === 'price' && v === null) throw new TradeError('Isi harga order.')
+        if (f === 'price' && v === null) throw new TradeError('Enter the order price.')
         acc.modifyOrder(o.id, f === 'price' ? v! : o.price, f === 'sl' ? v : o.sl, f === 'tp' ? v : o.tp)
       })
     }
@@ -623,7 +623,7 @@ export class TradeUI {
     const id = Number(input.dataset.id)
     const v = input.value.trim() === '' ? null : Number(input.value)
     try {
-      if (v !== null && !Number.isFinite(v)) throw new TradeError('Angka tidak valid.')
+      if (v !== null && !Number.isFinite(v)) throw new TradeError('Invalid number.')
       const p = acc.positions.find((x) => x.id === id)
       if (p) acc.modifyPosition(id, input.dataset.edit === 'sl' ? v : p.sl, input.dataset.edit === 'tp' ? v : p.tp)
     } catch (err) {
@@ -651,7 +651,7 @@ export class TradeUI {
     this.el.ask.textContent = q ? fmtPx(q.ask) : '–'
 
     const tabs = this.o.root.querySelectorAll<HTMLButtonElement>('[data-tab]')
-    const labels = { pos: `Posisi (${acc.positions.length})`, orders: `Order (${acc.orders.length})`, hist: `Riwayat (${acc.history.length})` }
+    const labels = { pos: `Positions (${acc.positions.length})`, orders: `Orders (${acc.orders.length})`, hist: `History (${acc.history.length})` }
     for (const b of tabs) {
       b.textContent = labels[b.dataset.tab as keyof typeof labels]
       b.setAttribute('aria-selected', String(b.dataset.tab === this.tab))
@@ -692,48 +692,48 @@ export class TradeUI {
     const level = (kind: 'sl' | 'tp', v: number | null, id: number, order = false) =>
       v === null
         ? `<button type="button" class="lv-add ${kind}" data-act="${order ? 'o' : ''}add-${kind}" data-id="${id}">+ ${kind.toUpperCase()}</button>`
-        : `<span class="lv ${kind}"><span>${kind.toUpperCase()}</span><input aria-label="${kind === 'sl' ? 'Stop loss' : 'Take profit'}" type="number" step="0.01" inputmode="decimal" ${order ? 'data-oedit' : 'data-edit'}="${kind}" data-id="${id}" value="${v}"><button type="button" class="lv-x" data-act="${order ? 'o' : ''}clear-${kind}" data-id="${id}" aria-label="Hapus ${kind.toUpperCase()}">✕</button></span>`
+        : `<span class="lv ${kind}"><span>${kind.toUpperCase()}</span><input aria-label="${kind === 'sl' ? 'Stop loss' : 'Take profit'}" type="number" step="0.01" inputmode="decimal" ${order ? 'data-oedit' : 'data-edit'}="${kind}" data-id="${id}" value="${v}"><button type="button" class="lv-x" data-act="${order ? 'o' : ''}clear-${kind}" data-id="${id}" aria-label="Remove ${kind.toUpperCase()}">✕</button></span>`
     if (this.tab === 'pos') {
       html = acc.positions.length
         ? `<ul class="cards">${acc.positions
             .map(
               (p) => `<li class="card-row">
                 <div class="cr-top"><b class="${p.side}">${p.side.toUpperCase()} ${p.lots.toFixed(2)}</b><span class="cr-at">@ ${fmtPx(p.entry)}</span><b class="cr-pnl" data-pnl="${p.id}"></b>
-                <button type="button" class="x" data-act="close" data-id="${p.id}" aria-label="Tutup posisi" title="Tutup posisi">✕</button></div>
+                <button type="button" class="x" data-act="close" data-id="${p.id}" aria-label="Close position" title="Close position">✕</button></div>
                 <div class="cr-lv">${level('sl', p.sl, p.id)}${level('tp', p.tp, p.id)}</div>
               </li>`,
             )
             .join('')}</ul>
-            <div class="cards-foot"><span class="hint">Tarik garis posisi di chart untuk membuat SL/TP. Klik garis untuk menu.</span>${acc.positions.length > 1 ? '<button type="button" class="link" data-act="close-all">Tutup semua</button>' : ''}</div>`
-        : '<p class="empty">Belum ada posisi. Klik SELL atau BUY di tiket.</p>'
+            <div class="cards-foot"><span class="hint">Drag a position line on the chart to set SL/TP. Click a line for its menu.</span>${acc.positions.length > 1 ? '<button type="button" class="link" data-act="close-all">Close all</button>' : ''}</div>`
+        : '<p class="empty">No open positions. Click SELL or BUY in the ticket.</p>'
     } else if (this.tab === 'orders') {
       html = acc.orders.length
         ? `<ul class="cards">${acc.orders
             .map(
               (o) => `<li class="card-row">
                 <div class="cr-top"><b class="${o.side}">${o.side.toUpperCase()} ${o.type.toUpperCase()} ${o.lots.toFixed(2)}</b>
-                <span class="lv price"><span>@</span><input aria-label="Harga order" type="number" step="0.01" inputmode="decimal" data-oedit="price" data-id="${o.id}" value="${o.price}"></span>
-                <button type="button" class="x" data-act="cancel" data-id="${o.id}" aria-label="Batalkan order" title="Batalkan order">✕</button></div>
+                <span class="lv price"><span>@</span><input aria-label="Order price" type="number" step="0.01" inputmode="decimal" data-oedit="price" data-id="${o.id}" value="${o.price}"></span>
+                <button type="button" class="x" data-act="cancel" data-id="${o.id}" aria-label="Cancel order" title="Cancel order">✕</button></div>
                 <div class="cr-lv">${level('sl', o.sl, o.id, true)}${level('tp', o.tp, o.id, true)}</div>
               </li>`,
             )
-            .join('')}</ul><div class="cards-foot"><span class="hint">Geser garis order di chart untuk ubah harga.</span></div>`
-        : '<p class="empty">Tidak ada order pending. Pilih tipe Limit/Stop di tiket, atau klik kanan chart di harga yang diinginkan.</p>'
+            .join('')}</ul><div class="cards-foot"><span class="hint">Drag an order line on the chart to change its price.</span></div>`
+        : '<p class="empty">No pending orders. Choose Limit/Stop in the ticket, or right-click the chart at the price you want.</p>'
     } else {
       const rows = acc.history.slice(-100).reverse()
       html = rows.length
-        ? `<table><thead><tr><th>Trade</th><th>Entry → Exit</th><th>Tutup</th><th>P/L</th>${this.o.journal ? '<th></th>' : ''}</tr></thead><tbody>${rows
+        ? `<table><thead><tr><th>Trade</th><th>Entry → Exit</th><th>Closed by</th><th>P/L</th>${this.o.journal ? '<th></th>' : ''}</tr></thead><tbody>${rows
             .map(
               (t) => `<tr>
                 <td class="${t.side}">${t.side.toUpperCase()} ${t.lots.toFixed(2)}</td>
                 <td>${fmtPx(t.entry)} → ${fmtPx(t.exit)}</td>
                 <td>${esc(REASON[t.reason])}</td>
                 <td class="${t.pnl > 0 ? 'up' : t.pnl < 0 ? 'down' : ''}">${fmtMoney(t.pnl, true)}</td>
-                ${this.o.journal ? `<td><button type="button" class="link jr-btn" data-act="journal" data-id="${t.id}" title="Tulis jurnal untuk trade ini">${this.o.journal.has(t) ? '✓ Jurnal' : 'Jurnal'}</button></td>` : ''}
+                ${this.o.journal ? `<td><button type="button" class="link jr-btn" data-act="journal" data-id="${t.id}" title="Write a journal entry for this trade">${this.o.journal.has(t) ? '✓ Journal' : 'Journal'}</button></td>` : ''}
               </tr>`,
             )
             .join('')}</tbody></table>`
-        : '<p class="empty">Belum ada trade selesai.</p>'
+        : '<p class="empty">No closed trades yet.</p>'
     }
     this.el.body.innerHTML = html
   }
@@ -743,7 +743,7 @@ export class TradeUI {
     const s = stats(acc.history, acc.cfg.balance)
     const pf = s.profitFactor === Infinity ? '∞' : s.profitFactor.toFixed(2)
     this.el.stats.innerHTML = [
-      ['Trade', String(s.trades)],
+      ['Trades', String(s.trades)],
       ['Win rate', `${(s.winRate * 100).toFixed(0)}%`],
       ['Net', fmtMoney(s.net, true)],
       ['Profit factor', pf],

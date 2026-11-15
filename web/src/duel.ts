@@ -11,13 +11,13 @@ import type { Bar, TF } from './types'
 const fmtR = (r: number | null | undefined) => (r === null || r === undefined ? '–' : `${r > 0 ? '+' : ''}${r.toFixed(2)}R`)
 const cls = (n: number | null | undefined) => (!n ? '' : n > 0 ? 'pos' : 'neg')
 const REASON: Record<string, string> = {
-  tp: 'Kena TP',
-  sl: 'Kena SL',
-  time: 'Waktu habis',
+  tp: 'Hit TP',
+  sl: 'Hit SL',
+  time: 'Time up',
   skip: 'Skip',
-  timeout: 'Telat (skip)',
+  timeout: 'Too late (skip)',
   stopout: 'Stop-out',
-  unfilled: 'Order tidak tersentuh',
+  unfilled: 'Order not filled',
 }
 const TYPE: Record<DuelOrderType, string> = { market: 'Market', limit: 'Limit', stop: 'Stop' }
 const COLOR = { buy: '#4c8dff', sell: '#ef5350', sl: '#ef5350', tp: '#26a69a' }
@@ -247,7 +247,7 @@ export class DuelUI {
     if (!p || p.revealed || p.submitting) return []
     const px = round2(price)
     return (['buy', 'sell'] as const).map((side) => ({
-      label: `${side === 'buy' ? 'Buy' : 'Sell'} ${pendingTypeFor(p.snap.cut, side, px)} di ${px.toFixed(2)}`,
+      label: `${side === 'buy' ? 'Buy' : 'Sell'} ${pendingTypeFor(p.snap.cut, side, px)} at ${px.toFixed(2)}`,
       act: () => {
         p.draft.side = side
         p.draft.sl = null
@@ -279,16 +279,16 @@ export class DuelUI {
           <span>${label}<small data-o="${k}"></small></span>
           <span class="dp-in">
             <input type="number" step="0.01" inputmode="decimal" data-i="${k}" value="${v === null ? '' : v.toFixed(2)}" placeholder="${hint}" ${d.side ? '' : 'disabled'} />
-            <button type="button" class="dp-pick" data-b="pick" data-v="${k}" title="Klik chart untuk ${label}" aria-label="Klik chart untuk ${label}" ${d.side ? '' : 'disabled'}>
+            <button type="button" class="dp-pick" data-b="pick" data-v="${k}" title="Click the chart to set ${label}" aria-label="Click the chart to set ${label}" ${d.side ? '' : 'disabled'}>
               <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="5" /><path d="M10 1v5M10 14v5M1 10h5M14 10h5" /></svg>
             </button>
-            ${k === 'tp' && v !== null ? '<button type="button" class="dp-pick" data-b="clear-tp" title="Tanpa TP" aria-label="Tanpa TP">×</button>' : ''}
+            ${k === 'tp' && v !== null ? '<button type="button" class="dp-pick" data-b="clear-tp" title="No TP" aria-label="No TP">×</button>' : ''}
           </span>
         </label>`
     }
     this.panel.innerHTML = `
       <header class="dp-head">
-        <span class="dp-round">Ronde ${s.round}/${s.rounds}</span>
+        <span class="dp-round">Round ${s.round}/${s.rounds}</span>
         <span class="dp-timer" data-o="timer">--:--</span>
       </header>
       <div class="dp-bs">
@@ -296,19 +296,19 @@ export class DuelUI {
         <span class="dp-spread" title="Spread">${s.cut.spread.toFixed(2)}</span>
         <button type="button" class="buy" data-b="buy" aria-pressed="${d.side === 'buy'}"><small>BUY</small><b>${this.ask().toFixed(2)}</b></button>
       </div>
-      <div class="dp-seg" role="group" aria-label="Jenis order">${seg('market')}${seg('limit')}${seg('stop')}</div>
-      ${d.type === 'market' ? '' : field('price', 'Harga order', 'klik chart')}
-      ${field('sl', 'Stop loss', 'wajib')}
-      ${field('tp', 'Take profit', 'opsional')}
-      <div class="dp-rr" role="group" aria-label="TP cepat">
+      <div class="dp-seg" role="group" aria-label="Order type">${seg('market')}${seg('limit')}${seg('stop')}</div>
+      ${d.type === 'market' ? '' : field('price', 'Order price', 'click chart')}
+      ${field('sl', 'Stop loss', 'required')}
+      ${field('tp', 'Take profit', 'optional')}
+      <div class="dp-rr" role="group" aria-label="Quick TP">
         <span>TP</span>
         ${[1, 1.5, 2, 3].map((r) => `<button type="button" data-b="rr" data-v="${r}" ${d.side ? '' : 'disabled'}>${r}R</button>`).join('')}
       </div>
       <p class="dp-sum" data-o="sum"></p>
       <p class="dp-err" data-o="err" role="alert"></p>
-      <button type="button" class="dp-send ${d.side ?? ''}" data-b="send" data-o="send">Pilih BUY atau SELL</button>
-      <button type="button" class="dp-skip" data-b="skip">Skip ronde (0R)</button>
-      <p class="dp-help">Geser garis order, SL, dan TP di chart. Klik kanan chart untuk order limit/stop di harga itu. SL minimal ${s.minStop.toFixed(2)}.</p>`
+      <button type="button" class="dp-send ${d.side ?? ''}" data-b="send" data-o="send">Choose BUY or SELL</button>
+      <button type="button" class="dp-skip" data-b="skip">Skip round (0R)</button>
+      <p class="dp-help">Drag the order, SL and TP lines on the chart. Right-click the chart for a limit/stop order at that price. Minimum SL distance ${s.minStop.toFixed(2)}.</p>`
     this.sync()
   }
 
@@ -337,15 +337,15 @@ export class DuelUI {
     set(
       'sum',
       !d.side
-        ? 'Pilih arah dulu: tombol di atas atau di chart.'
-        : `${d.side.toUpperCase()} ${TYPE[d.type].toUpperCase()} ${e === null ? '' : `di ${e.toFixed(2)}`}${pending ? '. Kalau harga tidak menyentuh order sampai waktu habis, ronde dihitung 0R.' : '.'}`,
+        ? 'Pick a direction first: the buttons above or on the chart.'
+        : `${d.side.toUpperCase()} ${TYPE[d.type].toUpperCase()} ${e === null ? '' : `at ${e.toFixed(2)}`}${pending ? '. If price never reaches the order before the run ends, the round scores 0R.' : '.'}`,
     )
     set('err', err ?? '')
     const send = q<HTMLButtonElement>('[data-o="send"]')
     if (send) {
       send.disabled = !d.side || !!err || p.submitting
       send.className = `dp-send ${d.side ?? ''}`
-      send.textContent = !d.side ? 'Pilih BUY atau SELL' : `Kirim ${d.side.toUpperCase()} ${TYPE[d.type].toUpperCase()}`
+      send.textContent = !d.side ? 'Choose BUY or SELL' : `Send ${d.side.toUpperCase()} ${TYPE[d.type].toUpperCase()}`
     }
     this.renderQuick()
     this.drawLines()
@@ -359,7 +359,7 @@ export class DuelUI {
     }
     const d = p.draft
     this.quick.hidden = false
-    const hint = d.side && d.type !== 'market' && d.price === null ? '<span class="dq-hint">Klik chart untuk harga order</span>' : ''
+    const hint = d.side && d.type !== 'market' && d.price === null ? '<span class="dq-hint">Click the chart for the order price</span>' : ''
     this.quick.innerHTML = `
       <button type="button" class="sell" data-b="sell" aria-pressed="${d.side === 'sell'}"><small>SELL</small>${this.bid().toFixed(2)}</button>
       <span class="dq-spread">${p.snap.cut.spread.toFixed(2)}</span>
@@ -397,22 +397,22 @@ export class DuelUI {
     const type = (o.type ?? 'market') as DuelOrderType
     const row = (k: string, v: string) => `<div><dt>${k}</dt><dd>${v}</dd></div>`
     this.panel.innerHTML = `
-      <header class="dp-head"><span class="dp-round">Ronde ${s.round}/${s.rounds}</span><span class="dp-done">Selesai</span></header>
+      <header class="dp-head"><span class="dp-round">Round ${s.round}/${s.rounds}</span><span class="dp-done">Done</span></header>
       <div class="dp-res ${cls(o.r)}">
         <b>${fmtR(o.r)}</b>
         <span>${o.side === 'skip' ? 'Skip' : `${o.side.toUpperCase()} ${TYPE[type].toUpperCase()}`} · ${REASON[o.reason] ?? o.reason}</span>
-        ${res.symbol ? `<span class="dp-pair">Pair ronde ini: <b>${res.symbol}</b></span>` : ''}
+        ${res.symbol ? `<span class="dp-pair">This round's pair: <b>${res.symbol}</b></span>` : ''}
       </div>
       <dl class="dp-dl">
-        ${o.price !== null && o.price !== undefined ? row('Harga order', o.price.toFixed(2)) : ''}
+        ${o.price !== null && o.price !== undefined ? row('Order price', o.price.toFixed(2)) : ''}
         ${o.entry !== null ? row('Entry', o.entry.toFixed(2)) : ''}
         ${o.exit !== null ? row('Exit', o.exit.toFixed(2)) : ''}
         ${o.sl !== null ? row('SL', o.sl.toFixed(2)) : ''}
         ${o.tp !== null ? row('TP', o.tp.toFixed(2)) : ''}
-        ${res.totalR !== null ? row('Total duel', `<span class="${cls(res.totalR)}">${fmtR(res.totalR)}</span>`) : ''}
+        ${res.totalR !== null ? row('Duel total', `<span class="${cls(res.totalR)}">${fmtR(res.totalR)}</span>`) : ''}
       </dl>
-      <button type="button" class="dp-send next" data-b="${last ? 'summary' : 'next'}">${last ? 'Lihat hasil duel' : `Ronde ${s.round + 1} →`}</button>
-      <button type="button" class="dp-skip" data-b="quit">Ke halaman duel</button>`
+      <button type="button" class="dp-send next" data-b="${last ? 'summary' : 'next'}">${last ? 'See duel result' : `Round ${s.round + 1} →`}</button>
+      <button type="button" class="dp-skip" data-b="quit">Back to duels</button>`
     this.quick.hidden = true
   }
 
@@ -478,7 +478,7 @@ export class DuelUI {
     }
     if (a === 'pick') {
       const k = v as 'price' | 'sl' | 'tp'
-      const price = await this.host.pickPrice(k === 'price' ? 'Klik chart untuk harga order' : `Klik chart untuk ${k.toUpperCase()}`)
+      const price = await this.host.pickPrice(k === 'price' ? 'Click the chart for the order price' : `Click the chart for ${k.toUpperCase()}`)
       if (price === null || this.play !== p || p.revealed) return
       if (k === 'price') this.setPrice(price)
       else {
@@ -487,7 +487,7 @@ export class DuelUI {
       }
     }
     if (a === 'send') await this.submit('order', false)
-    if (a === 'skip' && (await ask('Ronde ini dihitung 0R.', { title: 'Skip ronde?', ok: 'Skip' }))) await this.submit('skip', false)
+    if (a === 'skip' && (await ask('This round scores 0R.', { title: 'Skip this round?', ok: 'Skip' }))) await this.submit('skip', false)
   }
 
   private async submit(what: 'order' | 'skip', auto: boolean) {
@@ -496,7 +496,7 @@ export class DuelUI {
     const d = p.draft
     if (what === 'order') {
       const err = this.error()
-      if (!d.side || err) return toast(err ?? 'Pilih BUY atau SELL.', 'bad')
+      if (!d.side || err) return toast(err ?? 'Choose BUY or SELL.', 'bad')
     }
     p.submitting = true
     this.sync()
@@ -508,7 +508,7 @@ export class DuelUI {
       )
       clearInterval(p.timer)
       p.revealed = res
-      if (auto && res.outcome.reason === 'timeout') toast('Waktu habis: ronde dihitung skip.', 'bad')
+      if (auto && res.outcome.reason === 'timeout') toast('Time is up: the round counts as a skip.', 'bad')
       await this.reveal(res)
     } catch (err) {
       p.submitting = false
@@ -526,7 +526,7 @@ export class DuelUI {
     const lines: DuelLine[] = []
     const at = o.entry ?? o.price ?? null
     if (o.side !== 'skip' && at !== null)
-      lines.push({ field: 'entry', price: at, title: o.entry === null ? 'Order (tidak tersentuh)' : 'Entry', color: COLOR[o.side], solid: true, drag: false })
+      lines.push({ field: 'entry', price: at, title: o.entry === null ? 'Order (not filled)' : 'Entry', color: COLOR[o.side], solid: true, drag: false })
     if (o.sl !== null) lines.push({ field: 'sl', price: o.sl, title: 'SL', color: COLOR.sl, solid: false, drag: false })
     if (o.tp !== null) lines.push({ field: 'tp', price: o.tp, title: 'TP', color: COLOR.tp, solid: false, drag: false })
     this.host.setLines(lines)

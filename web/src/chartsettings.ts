@@ -61,12 +61,12 @@ export const DEFAULT_LOOK: Look = {
 
 /** Ready-made looks, a quick start before fine-tuning. */
 export const THEMES: { name: string; look: Partial<Look> }[] = [
-  { name: 'Arena (bawaan)', look: {} },
-  { name: 'Gelap netral', look: { up: '#26a69a', down: '#ef5350', bg: '#0b0e14', gridColor: '#141924', textColor: '#7d8590' } },
-  { name: 'TradingView klasik', look: { up: '#089981', down: '#f23645', bg: '#131722', gridColor: '#1e222d', textColor: '#b2b5be' } },
-  { name: 'Kosong', look: { candle: 'hollow', up: '#e6e9ef', down: '#6b7280', border: true, grid: 'none', bg: '#000000' } },
-  { name: 'Terang', look: { up: '#089981', down: '#f23645', bg: '#ffffff', gridColor: '#f0f3fa', textColor: '#131722' } },
-  { name: 'Ungu malam', look: { up: '#09bbc8', down: '#e0457b', bg: '#1b1540', bg2: '#07060f', gridColor: '#241d4f', textColor: '#9a8fc4' } },
+  { name: 'Arena (default)', look: {} },
+  { name: 'Neutral dark', look: { up: '#26a69a', down: '#ef5350', bg: '#0b0e14', gridColor: '#141924', textColor: '#7d8590' } },
+  { name: 'Classic TradingView', look: { up: '#089981', down: '#f23645', bg: '#131722', gridColor: '#1e222d', textColor: '#b2b5be' } },
+  { name: 'Hollow', look: { candle: 'hollow', up: '#e6e9ef', down: '#6b7280', border: true, grid: 'none', bg: '#000000' } },
+  { name: 'Light', look: { up: '#089981', down: '#f23645', bg: '#ffffff', gridColor: '#f0f3fa', textColor: '#131722' } },
+  { name: 'Night purple', look: { up: '#09bbc8', down: '#e0457b', bg: '#1b1540', bg2: '#07060f', gridColor: '#241d4f', textColor: '#9a8fc4' } },
 ]
 
 const KEY = 'rc.v1.look'
@@ -142,40 +142,40 @@ const TABS: { id: string; title: string; fields: Field[] }[] = [
     id: 'candle',
     title: 'Candle',
     fields: [
-      { k: 'candle', label: 'Gaya', type: 'select', options: [['solid', 'Candle penuh'], ['hollow', 'Candle kosong (naik berlubang)']] },
-      { k: 'up', label: 'Warna naik', type: 'color' },
-      { k: 'down', label: 'Warna turun', type: 'color' },
-      { k: 'body', label: 'Badan', type: 'check' },
-      { k: 'border', label: 'Garis tepi', type: 'check' },
-      { k: 'borderUp', label: 'Tepi naik', type: 'color', nullable: 'ikut badan' },
-      { k: 'borderDown', label: 'Tepi turun', type: 'color', nullable: 'ikut badan' },
-      { k: 'wick', label: 'Sumbu (wick)', type: 'check' },
-      { k: 'wickUp', label: 'Sumbu naik', type: 'color', nullable: 'ikut badan' },
-      { k: 'wickDown', label: 'Sumbu turun', type: 'color', nullable: 'ikut badan' },
+      { k: 'candle', label: 'Style', type: 'select', options: [['solid', 'Solid candles'], ['hollow', 'Hollow candles (up candles hollow)']] },
+      { k: 'up', label: 'Up colour', type: 'color' },
+      { k: 'down', label: 'Down colour', type: 'color' },
+      { k: 'body', label: 'Body', type: 'check' },
+      { k: 'border', label: 'Border', type: 'check' },
+      { k: 'borderUp', label: 'Up border', type: 'color', nullable: 'same as body' },
+      { k: 'borderDown', label: 'Down border', type: 'color', nullable: 'same as body' },
+      { k: 'wick', label: 'Wick', type: 'check' },
+      { k: 'wickUp', label: 'Up wick', type: 'color', nullable: 'same as body' },
+      { k: 'wickDown', label: 'Down wick', type: 'color', nullable: 'same as body' },
     ],
   },
   {
     id: 'canvas',
-    title: 'Latar & grid',
+    title: 'Background & grid',
     fields: [
-      { k: 'bg', label: 'Latar', type: 'color' },
-      { k: 'bg2', label: 'Gradien bawah', type: 'color', nullable: 'tanpa gradien' },
-      { k: 'grid', label: 'Grid', type: 'select', options: [['both', 'Vertikal + horizontal'], ['vert', 'Vertikal saja'], ['horz', 'Horizontal saja'], ['none', 'Tanpa grid']] },
-      { k: 'gridColor', label: 'Warna grid', type: 'color' },
-      { k: 'textColor', label: 'Warna teks skala', type: 'color' },
-      { k: 'fontSize', label: 'Ukuran teks skala', type: 'number', min: 9, max: 18 },
-      { k: 'watermark', label: 'Tanda air simbol + timeframe', type: 'check' },
+      { k: 'bg', label: 'Background', type: 'color' },
+      { k: 'bg2', label: 'Bottom gradient', type: 'color', nullable: 'no gradient' },
+      { k: 'grid', label: 'Grid', type: 'select', options: [['both', 'Vertical + horizontal'], ['vert', 'Vertical only'], ['horz', 'Horizontal only'], ['none', 'No grid']] },
+      { k: 'gridColor', label: 'Grid colour', type: 'color' },
+      { k: 'textColor', label: 'Scale text colour', type: 'color' },
+      { k: 'fontSize', label: 'Scale text size', type: 'number', min: 9, max: 18 },
+      { k: 'watermark', label: 'Symbol + timeframe watermark', type: 'check' },
     ],
   },
   {
     id: 'scale',
-    title: 'Skala & garis',
+    title: 'Scale & lines',
     fields: [
-      { k: 'scale', label: 'Skala harga', type: 'select', options: [['normal', 'Normal'], ['log', 'Logaritmik'], ['percent', 'Persen dari candle pertama']] },
-      { k: 'crosshair', label: 'Crosshair', type: 'select', options: [['normal', 'Bebas'], ['magnet', 'Magnet ke close'], ['hidden', 'Sembunyi']] },
-      { k: 'bidAsk', label: 'Garis Bid / Ask', type: 'check' },
+      { k: 'scale', label: 'Price scale', type: 'select', options: [['normal', 'Normal'], ['log', 'Logarithmic'], ['percent', 'Percent from the first candle']] },
+      { k: 'crosshair', label: 'Crosshair', type: 'select', options: [['normal', 'Free'], ['magnet', 'Snap to close'], ['hidden', 'Hidden']] },
+      { k: 'bidAsk', label: 'Bid / Ask lines', type: 'check' },
       { k: 'volume', label: 'Volume', type: 'check' },
-      { k: 'rightOffset', label: 'Ruang kosong kanan (candle)', type: 'number', min: 0, max: 100 },
+      { k: 'rightOffset', label: 'Right margin (candles)', type: 'number', min: 0, max: 100 },
     ],
   },
 ]
@@ -232,16 +232,16 @@ export class ChartSettingsDialog {
       return `<div class="cs-row"><label for="${id}">${f.label}</label><div class="cs-ctl">${ctl}</div></div>`
     }
     this.dlg.innerHTML = `
-      <header class="cs-head"><b>Pengaturan chart</b><button type="button" data-cs="cancel" aria-label="Tutup">✕</button></header>
-      <div class="cs-themes"><span>Tema cepat</span>${THEMES.map((th, i) => `<button type="button" data-theme="${i}">${th.name}</button>`).join('')}</div>
+      <header class="cs-head"><b>Chart settings</b><button type="button" data-cs="cancel" aria-label="Close">✕</button></header>
+      <div class="cs-themes"><span>Quick themes</span>${THEMES.map((th, i) => `<button type="button" data-theme="${i}">${th.name}</button>`).join('')}</div>
       <div class="cs-main">
         <nav class="cs-tabs">${TABS.map((x) => `<button type="button" data-tab="${x.id}" aria-selected="${x.id === this.tab}">${x.title}</button>`).join('')}</nav>
         <div class="cs-body">${t.fields.map(field).join('')}</div>
       </div>
       <footer class="cs-foot">
-        <button type="button" data-cs="reset">Kembalikan bawaan</button>
+        <button type="button" data-cs="reset">Restore defaults</button>
         <span></span>
-        <button type="button" data-cs="cancel">Batal</button>
+        <button type="button" data-cs="cancel">Cancel</button>
         <button type="button" class="primary" data-cs="ok">OK</button>
       </footer>`
   }

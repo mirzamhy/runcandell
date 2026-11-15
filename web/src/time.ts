@@ -12,7 +12,7 @@ export const ZONES: ZoneOption[] = [
   { id: 'America/New_York', label: 'New York' },
   ...(['UTC', 'Asia/Jakarta', 'Europe/London', 'America/New_York'].includes(browserZone)
     ? []
-    : [{ id: browserZone, label: `Lokal (${browserZone})` }]),
+    : [{ id: browserZone, label: `Local (${browserZone})` }]),
 ]
 
 const formatters = new Map<string, Intl.DateTimeFormat>()

@@ -97,7 +97,7 @@ export function runBacktest(inp: RunInput): RunResult {
 
   const enter = (sig: NonNullable<Signal['enter']>, b: Bar, a: number) => {
     const side: Side = sig.side
-    if (!inHours(b.time)) return skip('di luar jam entry')
+    if (!inHours(b.time)) return skip('outside entry hours')
     const slip = side === 'buy' ? spec.slippage : -spec.slippage
     const entry = side === 'buy' ? b.open + b.spread + slip : b.open + slip
     const dir = side === 'buy' ? 1 : -1
@@ -105,23 +105,23 @@ export function runBacktest(inp: RunInput): RunResult {
     let sl: number | null = sig.sl ?? null
     if (sl === null && spec.sl.kind !== 'none') {
       const dist = spec.sl.kind === 'atr' ? a * spec.sl.value : spec.sl.value
-      if (!(dist > 0)) return skip('ATR belum siap')
+      if (!(dist > 0)) return skip('ATR not ready')
       sl = entry - dir * dist
     }
     let tp: number | null = sig.tp ?? null
     if (tp === null && spec.tp.kind !== 'none') {
       const dist =
         spec.tp.kind === 'atr' ? a * spec.tp.value : spec.tp.kind === 'rr' ? (sl === null ? NaN : Math.abs(entry - sl) * spec.tp.value) : spec.tp.value
-      if (!(dist > 0)) return skip(spec.tp.kind === 'rr' ? 'TP R:R butuh SL' : 'ATR belum siap')
+      if (!(dist > 0)) return skip(spec.tp.kind === 'rr' ? 'R:R TP needs an SL' : 'ATR not ready')
       tp = entry + dir * dist
     }
 
     let lots = spec.sizing.value
     const risk1 = sl === null ? null : (Math.abs(entry - sl) * contract) / (jpy ? entry : 1) // USD per 1 lot
     if (spec.sizing.kind === 'risk') {
-      if (!risk1) return skip('risiko % butuh SL')
+      if (!risk1) return skip('risk % needs an SL')
       lots = Math.floor((acc.balance * spec.sizing.value) / 100 / risk1 / LOT_STEP + 1e-9) * LOT_STEP
-      if (lots < LOT_STEP) return skip('lot di bawah 0.01')
+      if (lots < LOT_STEP) return skip('lots below 0.01')
     }
     lots = Math.min(100, Math.round(lots / LOT_STEP) * LOT_STEP)
 

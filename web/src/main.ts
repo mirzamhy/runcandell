@@ -389,7 +389,7 @@ function syncBtMarkers() {
 }
 
 function setBacktest(open: boolean) {
-  if (open && replay) return toast('Keluar dari replay dulu untuk backtest.', 'bad')
+  if (open && replay) return toast('Exit replay first to run a backtest.', 'bad')
   if (open && !bt) {
     bt = new BacktestUI({
       root: btEl,
@@ -633,7 +633,7 @@ const duel = new DuelUI(duelPanelEl, duelQuickEl, {
     new Promise((res) => {
       pickResolve?.(null)
       pickResolve = res
-      pricePick.textContent = `${label} · Esc batal`
+      pricePick.textContent = `${label} · Esc to cancel`
       pricePick.hidden = false
       chartWrap.classList.add('picking')
     }),
@@ -775,7 +775,7 @@ function updateLegend(param?: MouseEventParams<Time>) {
     `<span><span class="k">C</span><span class="${cls}">${fmt(b.close)}</span></span>`,
     `<span><span class="k">Ask</span><span class="ask">${fmt(b.close + b.spread)}</span></span>`,
     `<span class="${cls}">${chg >= 0 ? '+' : ''}${fmt(chg)} (${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%)</span>`,
-    `<span><span class="k">Vol</span>${b.volume.toLocaleString('id-ID')}</span>`,
+    `<span><span class="k">Vol</span>${b.volume.toLocaleString('en-US')}</span>`,
     `<span><span class="k">Spread</span>${fmt(b.spread)}</span>`,
   ].join('')
 }
@@ -783,13 +783,13 @@ function updateLegend(param?: MouseEventParams<Time>) {
 function updateStatus() {
   const zoneLabel = ZONES.find((z) => z.id === zone)?.label ?? zone
   if (duelBars) {
-    statusInfo.textContent = `Duel ${tf} · harga dinormalisasi, tanggal${duelHard ? ' dan jam' : ''} disembunyikan · Ask = Bid + spread`
+    statusInfo.textContent = `Duel ${tf} · prices normalised, date${duelHard ? ' and time' : ''} hidden · Ask = Bid + spread`
     return
   }
   if (replay) {
     statusInfo.textContent =
-      `Replay ${tf} · ${hideDate() ? 'tanggal disembunyikan' : `mulai ${formatWall(shift(replay.startTime))}`} · ` +
-      `harga candle = Bid, Ask = Bid + spread`
+      `Replay ${tf} · ${hideDate() ? 'dates hidden' : `from ${formatWall(shift(replay.startTime))}`} · ` +
+      `candle price = Bid, Ask = Bid + spread`
     return
   }
   const m1 = manifest.timeframes.M1
@@ -797,9 +797,9 @@ function updateStatus() {
   const from = formatWall(shift(m1[0].from), false)
   const to = formatWall(shift(m1[m1.length - 1].to), false)
   statusInfo.textContent =
-    `Data ${from} → ${to} · ${total.toLocaleString('id-ID')} candle M1 · ` +
-    `dimuat ${store.bars.length.toLocaleString('id-ID')} candle ${tf} · zona ${tf === 'D1' ? 'hari trading NY 17:00' : zoneLabel} · ` +
-    `harga candle = Bid, Ask = Bid + spread`
+    `Data ${from} → ${to} · ${total.toLocaleString('en-US')} M1 candles · ` +
+    `loaded ${store.bars.length.toLocaleString('en-US')} ${tf} candles · zone ${tf === 'D1' ? 'NY 17:00 trading day' : zoneLabel} · ` +
+    `candle price = Bid, Ask = Bid + spread`
 }
 
 function showOverlay(html: string | null) {
@@ -819,7 +819,7 @@ function withBusy<T>(fn: () => Promise<T>): Promise<T | undefined> {
       return await fn()
     } catch (err) {
       console.error(err)
-      showOverlay(`Gagal memuat data: ${(err as Error).message}`)
+      showOverlay(`Could not load data: ${(err as Error).message}`)
       return undefined
     } finally {
       busy = false
@@ -959,14 +959,14 @@ const replayHelp = document.createElement('div')
 replayHelp.className = 'replay-help'
 replayHelp.hidden = true
 replayHelp.innerHTML = `
-  <h3>Cara pakai replay</h3>
+  <h3>How replay works</h3>
   <ol>
-    <li><b>Putar</b> candle satu per satu dengan ▶ (<kbd>Spasi</kbd>) atau <b>Maju 1</b> (<kbd>Shift</kbd>+<kbd>→</kbd>). Atur kecepatan di sebelahnya.</li>
-    <li><b>Buka posisi</b> dengan SELL / BUY di panel order. Untuk order limit/stop: klik kanan chart di harga yang diinginkan.</li>
-    <li><b>SL dan TP</b>: tarik garis posisi di chart ke atas/bawah, atau klik garisnya lalu pilih Pasang SL/TP. Semua garis bisa digeser.</li>
-    <li><b>Selesai</b>: Simpan untuk lanjut nanti, Keluar replay untuk kembali ke chart biasa. Riwayat dan statistik ada di panel.</li>
+    <li><b>Play</b> candles one by one with ▶ (<kbd>Space</kbd>) or <b>Step</b> (<kbd>Shift</kbd>+<kbd>→</kbd>). Set the speed next to it.</li>
+    <li><b>Open a position</b> with SELL / BUY in the order panel. For a limit/stop order, right-click the chart at the price you want.</li>
+    <li><b>SL and TP</b>: drag the position line up or down on the chart, or click the line and choose Set SL/TP. Every line can be dragged.</li>
+    <li><b>Done</b>: Save to continue later, Exit replay to go back to the normal chart. History and stats are in the panel.</li>
   </ol>
-  <button type="button" data-help="close">Mengerti</button>`
+  <button type="button" data-help="close">Got it</button>`
 chartWrap.append(replayHelp)
 replayHelp.addEventListener('click', (e) => {
   if ((e.target as HTMLElement).closest('[data-help="close"]')) replayHelp.hidden = true
@@ -992,9 +992,9 @@ function setReplayUI(on: boolean) {
 
 function syncPlayButton() {
   const b = replayBar.querySelector<HTMLButtonElement>('[data-r="play"]')!
-  b.innerHTML = playing ? '⏸ <span class="rb-label">Jeda</span>' : '▶ <span class="rb-label">Putar</span>'
-  b.setAttribute('aria-label', playing ? 'Jeda' : 'Putar')
-  b.title = playing ? 'Jeda (Spasi)' : 'Putar (Spasi)'
+  b.innerHTML = playing ? '⏸ <span class="rb-label">Pause</span>' : '▶ <span class="rb-label">Play</span>'
+  b.setAttribute('aria-label', playing ? 'Pause' : 'Play')
+  b.title = playing ? 'Pause (Space)' : 'Play (Space)'
 }
 
 // ---------- choosing the replay start: point, adjust, then confirm ----------
@@ -1037,8 +1037,8 @@ function syncPick() {
   pickStartBtn.hidden = pickTime === null
   pickMsg.innerHTML =
     pickTime === null
-      ? '<b>Pilih titik mulai:</b> klik candle. <small>Candle sesudahnya disembunyikan.</small>'
-      : `Mulai dari <b>${candleLabel(pickTime)}</b> <small>· geser garis atau ← → untuk ubah</small>`
+      ? '<b>Choose a start point:</b> click a candle. <small>Candles after it are hidden.</small>'
+      : `Start from <b>${candleLabel(pickTime)}</b> <small>· drag the line or use ← → to adjust</small>`
 }
 
 function placePick(i: number) {
@@ -1129,7 +1129,7 @@ async function stepOnce(): Promise<boolean> {
       saveSession()
     }
   })
-  if (!moved) toast('Data habis, replay selesai.')
+  if (!moved) toast('End of data, replay finished.')
   return moved
 }
 
@@ -1174,7 +1174,7 @@ function buildReplayControls() {
     if (picking) return setPicking(false)
     const saved = load<ReplaySession | null>(KEY.replay, null)
     if (!saved) return setPicking(true)
-    void ask('Posisi, order, dan riwayat sesi terakhir masih tersimpan.', { title: 'Lanjutkan replay?', ok: 'Lanjutkan', cancel: 'Sesi baru' }).then((ok) =>
+    void ask('Positions, orders and history from your last session are still saved.', { title: 'Resume replay?', ok: 'Resume', cancel: 'New session' }).then((ok) =>
       ok ? startReplay(saved.cursorTime, saved) : setPicking(true),
     )
   })
@@ -1237,7 +1237,7 @@ function buildReplayControls() {
     }
     if (act === 'restart') {
       const from = replay.startTime
-      void ask('Posisi dan riwayat sesi ini dihapus.', { title: 'Ulang dari titik awal?', ok: 'Ulang', danger: true }).then((ok) => {
+      void ask('Positions and history of this session are cleared.', { title: 'Restart from the start point?', ok: 'Restart', danger: true }).then((ok) => {
         if (ok) void startReplay(from)
       })
     }
@@ -1246,7 +1246,7 @@ function buildReplayControls() {
     if (act === 'help') replayHelp.hidden = !replayHelp.hidden
   })
   const speedSel = replayBar.querySelector<HTMLSelectElement>('[data-r="speed"]')!
-  for (const s of [1, 2, 5, 10, 20]) speedSel.add(new Option(`${s}×/detik`, String(s), false, s === speed))
+  for (const s of [1, 2, 5, 10, 20]) speedSel.add(new Option(`${s}×/sec`, String(s), false, s === speed))
   speedSel.addEventListener('change', () => {
     speed = Number(speedSel.value)
     save(KEY.speed, speed)
@@ -1305,8 +1305,8 @@ function buildContextMenu() {
     if (hit) {
       drawings.select(hit)
       items.push(
-        { label: 'Duplikat gambar', hint: 'Ctrl+D', act: () => drawings.duplicate(hit) },
-        { label: 'Hapus gambar', hint: 'Del', danger: true, act: () => drawings.removeSelected() },
+        { label: 'Duplicate drawing', hint: 'Ctrl+D', act: () => drawings.duplicate(hit) },
+        { label: 'Delete drawing', hint: 'Del', danger: true, act: () => drawings.removeSelected() },
         'sep',
       )
     }
@@ -1323,21 +1323,21 @@ function buildContextMenu() {
       // below the market a buy waits as a limit and a sell as a stop; above it is the other way round
       const below = p < q.bid
       items.push(
-        { label: `${below ? 'Buy limit' : 'Sell limit'} di ${px(p)}`, hint: 'isi tiket', act: () => trade.prefill('limit', p) },
-        { label: `${below ? 'Sell stop' : 'Buy stop'} di ${px(p)}`, hint: 'isi tiket', act: () => trade.prefill('stop', p) },
+        { label: `${below ? 'Buy limit' : 'Sell limit'} at ${px(p)}`, hint: 'fill ticket', act: () => trade.prefill('limit', p) },
+        { label: `${below ? 'Sell stop' : 'Buy stop'} at ${px(p)}`, hint: 'fill ticket', act: () => trade.prefill('stop', p) },
         'sep',
       )
     }
 
     if (pt && price !== null) {
       items.push(
-        { label: `Garis horizontal di ${pxs}`, act: () => drawings.addAt('hline', { t: pt.t, p: price }) },
-        { label: `Salin harga ${pxs}`, act: () => void navigator.clipboard?.writeText(pxs) },
+        { label: `Horizontal line at ${pxs}`, act: () => drawings.addAt('hline', { t: pt.t, p: price }) },
+        { label: `Copy price ${pxs}`, act: () => void navigator.clipboard?.writeText(pxs) },
       )
     }
     if (!replay && !duelBars && !btOpen()) {
       items.push({
-        label: 'Mulai replay dari candle ini',
+        label: 'Start replay from this candle',
         act: () => {
           const l = chart.timeScale().coordinateToLogical(x)
           if (l === null) return
@@ -1349,10 +1349,10 @@ function buildContextMenu() {
     }
     items.push(
       'sep',
-      { label: magnetLabel(drawings.magnet), hint: 'ganti', act: () => drawTools.cycleMagnet() },
-      { label: 'Pengaturan chart…', act: openChartSettings },
+      { label: magnetLabel(drawings.magnet), hint: 'switch', act: () => drawTools.cycleMagnet() },
+      { label: 'Chart settings…', act: openChartSettings },
       {
-        label: 'Reset skala chart',
+        label: 'Reset chart scale',
         act: () => {
           chart.priceScale('right').applyOptions({ autoScale: true })
           showLatest(currentSpan())
@@ -1360,7 +1360,7 @@ function buildContextMenu() {
       },
     )
     if (drawings.drawings.length) {
-      items.push({ label: 'Hapus semua gambar', danger: true, act: () => void askClear().then((ok) => ok && drawings.clear()) })
+      items.push({ label: 'Delete all drawings', danger: true, act: () => void askClear().then((ok) => ok && drawings.clear()) })
     }
     openMenu(e.clientX, e.clientY, items)
   })
@@ -1476,7 +1476,7 @@ function buildSymbolPicker(list: SymbolInfo[]) {
 // ---------- boot ----------
 
 async function boot() {
-  showOverlay('Memuat data…')
+  showOverlay('Loading data…')
   try {
     const list = await loadSymbols().catch((): SymbolInfo[] => [])
     if (list.length && !list.some((x) => x.symbol === current().symbol)) {
@@ -1489,7 +1489,7 @@ async function boot() {
     manifest = await loadManifest(current().symbol)
   } catch {
     showOverlay(
-      'Data belum ada. Dari folder repo jalankan:' +
+      'No data yet. From the repo folder run:' +
         '<code>python tools/export_mt5.py</code><code>python tools/build_data.py --strict</code>',
     )
     return
@@ -1501,7 +1501,7 @@ async function boot() {
   try {
     await store.loadAround(null)
   } catch (err) {
-    showOverlay(`Gagal memuat data: ${(err as Error).message}`)
+    showOverlay(`Could not load data: ${(err as Error).message}`)
     return
   }
   render()

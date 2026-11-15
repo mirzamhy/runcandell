@@ -69,7 +69,7 @@ eq('time exit', [r.trades[0].reason, r.trades[0].bars], ['time', 2])
 
 // 6. filters and skips
 r = run(flat(10), spec({ hours: { on: true, from: 14, to: 23 } }), sig({ 1: { enter: { side: 'buy' } } }))
-eq('hours filter', [r.trades.length, r.skipped['di luar jam entry']], [0, 1])
+eq('hours filter', [r.trades.length, r.skipped['outside entry hours']], [0, 1])
 r = run(flat(10), spec({ hours: { on: true, from: 22, to: 5 } }), sig({ 1: { enter: { side: 'buy' } } }))
 eq('hours wrap midnight', r.trades.length, 1)
 r = run(flat(10), spec({ sl: { kind: 'atr', value: 1 } }), sig({ 1: { enter: { side: 'buy' } } }))
@@ -104,13 +104,13 @@ eq('downsample keeps the low and the end', [ds.v.length, ds.v.includes(-1), ds.v
 
 // 10. params: one knob moves the same EMA in buy and sell rules
 const s10 = defaultSpec()
-const p = listParams(s10).find((x) => x.label.startsWith('EMA periode (20)'))!
+const p = listParams(s10).find((x) => x.label.startsWith('EMA period (20)'))!
 const s11 = withParam(s10, p.id, 10)
 eq('both EMA 20 changed', [s11.long[0].a.p[0], s11.short[0].a.p[0], s11.long[0].b.p[0]], [10, 10, 50])
 eq('original untouched', s10.long[0].a.p[0], 20)
 const ids = listParams(s10)
-const e20 = ids.find((x) => x.label.startsWith('EMA periode (20)'))!.id
-const e50 = ids.find((x) => x.label.startsWith('EMA periode (50)'))!.id
+const e20 = ids.find((x) => x.label.startsWith('EMA period (20)'))!.id
+const e50 = ids.find((x) => x.label.startsWith('EMA period (50)'))!.id
 const s12 = withParams(s10, [[e20, 50], [e50, 100]])
 eq('no chaining', [s12.long[0].a.p[0], s12.long[0].b.p[0]], [50, 100])
 

@@ -20,11 +20,11 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
   try {
     res = await fetch(`/api${path}`, { method, headers, body: payload, credentials: 'same-origin' })
   } catch {
-    throw new ApiError(0, 'Server akun tidak bisa dihubungi.')
+    throw new ApiError(0, 'Cannot reach the account server.')
   }
   const type = res.headers.get('content-type') ?? ''
   if (!type.includes('json')) {
-    if (!res.ok) throw new ApiError(res.status, res.status >= 500 ? 'Server akun tidak bisa dihubungi.' : `HTTP ${res.status}`)
+    if (!res.ok) throw new ApiError(res.status, res.status >= 500 ? 'Cannot reach the account server.' : `HTTP ${res.status}`)
     return (await res.blob()) as T
   }
   const data = await res.json()
