@@ -379,7 +379,7 @@ export function createApp(db: DatabaseSync, opt: AppOptions) {
     const r = db.prepare('SELECT * FROM backtests WHERE id = ? AND user_id = ?').get(idParam(c), c.get('user').id) as
       | { id: number; name: string; spec_json: string; metrics_json: string; curve_json: string; range_from: number; range_to: number; created_at: number }
       | undefined
-    if (!r) throw new HttpError(404, 'Backtest tidak ditemukan.')
+    if (!r) throw new HttpError(404, 'Backtest not found.')
     return c.json({
       id: r.id,
       name: r.name,

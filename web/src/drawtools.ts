@@ -233,8 +233,8 @@ export class DrawTools {
     this.magnetBtn = this.button('magnet', '', () => this.cycleMagnet())
     this.magnetBtn.classList.add('magnet')
     n.append(this.magnetBtn, sep())
-    this.undoBtn = this.button('undo', 'Batalkan (Ctrl+Z)', () => this.layer.undo())
-    this.redoBtn = this.button('redo', 'Ulangi (Ctrl+Y)', () => this.layer.redo())
+    this.undoBtn = this.button('undo', 'Undo (Ctrl+Z)', () => this.layer.undo())
+    this.redoBtn = this.button('redo', 'Redo (Ctrl+Y)', () => this.layer.redo())
     this.eyeBtn = this.button('eye', '', () => {
       this.layer.hideAll = !this.layer.hideAll
       write(KEY.hideAll, this.layer.hideAll)
@@ -344,7 +344,7 @@ export class DrawTools {
       </li>`
     }
     this.tree.innerHTML = `
-      <header><b>Gambar (${list.length})</b>
+      <header><b>Drawings (${list.length})</b>
         <button type="button" data-ot="lockall" title="Lock / unlock all">${svg('lock')}</button>
         <button type="button" data-ot="close" aria-label="Close list">✕</button></header>
       ${this.layer.hideAll ? '<p class="ot-note">All drawings are hidden (eye icon in the toolbar).</p>' : ''}
