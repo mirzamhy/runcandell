@@ -35,6 +35,9 @@ import { instrument } from '../../web/src/instruments.ts'
 export const GRACE = 5
 const DAY = 86400
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+/** timeframes a finished round can be reviewed in, and how many candles before the cut each shows */
+const REVIEW_TFS = ['M1', 'M5', 'M15', 'H1'] as const
+const REVIEW_BEFORE = 150
 
 interface DuelRow {
   id: number
@@ -282,7 +285,14 @@ export function mountDuels(app: Hono<Env>, db: DatabaseSync, source: MarketSourc
         realTime: done ? r.cut_time : null,
         k: done ? r.k : null,
         symbol: done ? r.symbol : null,
-        results: visible.map((x) => ({ nickname: ps.find((p) => p.user_id === x.user_id)?.nickname ?? '?', side: x.side, r: x.r, reason: x.reason })),
+        results: visible.map((x) => ({
+          nickname: ps.find((p) => p.user_id === x.user_id)?.nickname ?? '?',
+          side: x.side,
+          r: x.r,
+          reason: x.reason,
+          // real prices only once the duel is over, like the date
+          ...(done ? { type: x.order_type ?? 'market', price: x.order_price, entry: x.entry, exit: x.exit, exitTime: x.exit_time, sl: x.sl, tp: x.tp } : {}),
+        })),
       }
     })
     return c.json({
@@ -398,6 +408,71 @@ export function mountDuels(app: Hono<Env>, db: DatabaseSync, source: MarketSourc
       totalR: me.total_r,
       // the pair is revealed once you have decided
       symbol: r.symbol,
+    })
+  })
+
+  /**
+   * Review of a finished round: real candles around the cut and every player's trade in real prices,
+   * so a player can see where it entered, where it left and where SL/TP sat.
+   */
+  app.get('/api/duels/:code/rounds/:n/review', async (c) => {
+    const user = c.get('user')
+    const d = duelByCode(c.req.param('code'))
+    if (!isMember(d.id, user.id)) throw new HttpError(403, 'You are not a player in this duel.')
+    sweep(d, user.id)
+    const status = (db.prepare('SELECT status FROM duels WHERE id = ?').get(d.id) as { status: string }).status
+    if (status !== 'done') throw new HttpError(409, 'The review opens once every player has finished the duel.')
+    const n = roundParam(c)
+    const tf = c.req.query('tf') === undefined ? 'M5' : pick(c.req.query('tf'), REVIEW_TFS, 'Timeframe')
+    const r = roundOf(d.id, n)
+    const m = needMarket(r.symbol)
+    const { cut } = await cutContext(m, r)
+    const fut = await future(m, r, d.run_minutes)
+    const runEnd = fut.length ? fut[fut.length - 1].time : r.cut_time
+    const step = TF_SEC[tf]
+    const tail = Math.max(step * 20, 3600)
+    const bars = await m.bars(tf, r.cut_time - REVIEW_BEFORE * step, runEnd + tail)
+    const ps = players(d.id)
+    const trades = decisions(d.id)
+      .filter((x) => x.round_no === n && x.side !== null)
+      .map((x) => {
+        const o = rowOutcome(x)
+        // the fill time is not stored: replay the same decision on the same candles (deterministic)
+        let entryTime: number | null = null
+        if ((o.side === 'buy' || o.side === 'sell') && x.reason !== 'timeout' && o.sl !== null)
+          entryTime = runDecision(cut, fut, { side: o.side, type: o.type ?? 'market', price: o.price ?? null, sl: o.sl, tp: o.tp }).entryTime ?? null
+        return {
+          nickname: ps.find((p) => p.user_id === x.user_id)?.nickname ?? '?',
+          me: x.user_id === user.id,
+          side: o.side,
+          type: o.type ?? 'market',
+          price: o.price ?? null,
+          entry: o.entry,
+          entryTime,
+          exit: o.exit,
+          exitTime: o.exitTime,
+          sl: o.sl,
+          tp: o.tp,
+          r: o.r,
+          reason: x.reason,
+        }
+      })
+    return c.json({
+      code: d.code,
+      round: n,
+      rounds: d.rounds,
+      symbol: r.symbol,
+      digits: instrument(r.symbol).digits,
+      tf,
+      cutTime: r.cut_time,
+      runMinutes: d.run_minutes,
+      runEnd,
+      bid: cut.close,
+      ask: cut.close + cut.spread,
+      from: bars.length ? bars[0].time : r.cut_time,
+      to: bars.length ? bars[bars.length - 1].time : runEnd,
+      bars,
+      trades,
     })
   })
 

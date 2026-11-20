@@ -176,3 +176,37 @@ test('stats: own record and weekly board of finished duels only', async () => {
   assert.equal(st.me.rank, 1)
   assert.equal((await b('GET', '/api/stats')).body.me.rank, null)
 })
+
+test('review: real candles and trades, only after the duel is over', async () => {
+  const { client } = setup()
+  const a = client()
+  const b = client()
+  await a('POST', '/api/auth/guest', { nickname: 'alice' })
+  await b('POST', '/api/auth/guest', { nickname: 'bob' })
+  const { code } = (await a('POST', '/api/duels', { mode: 'async', ...PARAMS, rounds: 1 })).body
+  await b('POST', `/api/duels/${code}/join`)
+  const s = (await a('POST', `/api/duels/${code}/rounds/1/start`)).body
+  const entry = s.cut.close + s.cut.spread
+  await a('POST', `/api/duels/${code}/rounds/1/decide`, { side: 'buy', sl: entry - s.minStop * 2, tp: entry + s.minStop * 4 })
+  assert.equal((await a('GET', `/api/duels/${code}/rounds/1/review`)).status, 409, 'locked while bob still plays')
+
+  await b('POST', `/api/duels/${code}/rounds/1/start`)
+  await b('POST', `/api/duels/${code}/rounds/1/decide`, { side: 'skip' })
+  const detail = (await a('GET', `/api/duels/${code}`)).body
+  const mine = detail.rounds[0].results.find((x: { nickname: string }) => x.nickname === 'alice')
+  assert.ok(mine.entry > 1500, 'finished duel lists the real entry, not the disguised one')
+
+  assert.equal((await a('GET', `/api/duels/${code}/rounds/1/review?tf=D1`)).status, 400)
+  const rv = (await a('GET', `/api/duels/${code}/rounds/1/review?tf=M5`)).body
+  assert.equal(rv.symbol, 'XAUUSD')
+  assert.equal(rv.tf, 'M5')
+  assert.ok(rv.bars.length > 150, 'candles before and after the cut')
+  assert.ok(rv.bars[0].time < rv.cutTime && rv.bars.at(-1).time >= rv.runEnd, 'covers the whole trade')
+  const t = rv.trades.find((x: { nickname: string }) => x.nickname === 'alice')
+  assert.equal(t.me, true)
+  assert.equal(t.entry, mine.entry)
+  assert.equal(t.entryTime, rv.cutTime, 'market order opens at the cut')
+  assert.ok(t.exitTime > rv.cutTime && t.exitTime <= rv.runEnd)
+  assert.equal(rv.trades.find((x: { nickname: string }) => x.nickname === 'bob').side, 'skip')
+  assert.equal((await b('GET', `/api/duels/${code}/rounds/1/review`)).status, 200, 'both players can review')
+})
