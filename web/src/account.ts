@@ -2,7 +2,7 @@
 import { ApiError, api, type BacktestItem, type JournalEntry, type JournalTrade, type ReplayItem, type User } from './api'
 import { formatWall, makeShifter } from './time'
 import { toast } from './trade'
-import { ask } from './shared/ask'
+import { ask, askText } from './shared/ask'
 import { mountGoogleButton } from './shared/google'
 import { px } from './current'
 
@@ -85,7 +85,7 @@ export class AccountUI {
     d.innerHTML = `
       <header class="acct-head">
         <div class="bt-tabs" role="tablist"></div>
-        <button type="button" class="bt-x" data-a="close" aria-label="Tutup">×</button>
+        <button type="button" class="bt-x" data-a="close" aria-label="Close">×</button>
       </header>
       <div class="acct-body"></div>`
     this.body = d.querySelector('.acct-body')!
@@ -504,7 +504,7 @@ export class AccountUI {
 
   async saveReplay(session: { serverId?: number | null; name?: string }, defaultName: string): Promise<{ id: number; name: string } | null> {
     if (!(await this.requireLogin())) return null
-    const name = session.serverId ? session.name || defaultName : prompt('Session name:', session.name || defaultName)?.trim()
+    const name = session.serverId ? session.name || defaultName : await askText('Session name', session.name || defaultName, { title: 'Save replay session', max: 60 })
     if (!name) return null
     const { serverId, ...rest } = session
     const r = await api.saveReplay(name, { ...rest, name }, serverId ?? undefined)
@@ -514,7 +514,7 @@ export class AccountUI {
 
   async saveBacktest(b: { spec: unknown; metrics: unknown; curve: unknown; from: number; to: number }, defaultName: string) {
     if (!(await this.requireLogin())) return
-    const name = prompt('Backtest name:', defaultName)?.trim()
+    const name = await askText('Backtest name', defaultName, { title: 'Save backtest', max: 80 })
     if (!name) return
     await api.saveBacktest({ name: name.slice(0, 80), ...b })
     toast('Backtest saved to your account.', 'good')
