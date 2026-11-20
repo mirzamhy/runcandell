@@ -62,11 +62,17 @@ export interface TicketPreview {
 }
 
 const HIT_Y = 8
+const HIT_TOUCH = 18
+/** on touch a line is grabbed only this close to the price axis; a swipe anywhere else pans the chart */
+const GRAB_TOUCH_PX = 90
+const TOUCH = matchMedia('(pointer: coarse)').matches
 const ARM_PX = 4
 
 class OrderLines {
   private lines = new Map<LineKey, IPriceLine>()
   private drag: DragState | null = null
+  /** a touch that landed on a line away from its handle: a quick tap still opens the line's menu */
+  private tap: { kind: DragKind; id: number; x: number; y: number; t: number; pointer: number } | null = null
   private readonly chart: IChartApi
   private readonly series: ISeriesApi<'Candlestick'>
   private readonly host: HTMLElement
@@ -86,6 +92,7 @@ class OrderLines {
     host.addEventListener('pointerdown', (e) => this.down(e), true)
     host.addEventListener('pointermove', (e) => this.move(e), true)
     host.addEventListener('pointerup', (e) => this.up(e), true)
+    host.addEventListener('pointercancel', (e) => this.cancel(e), true)
   }
 
   clear() {
@@ -158,7 +165,7 @@ class OrderLines {
     return { x: e.clientX - r.left, y: e.clientY - r.top }
   }
 
-  private hit(x: number, y: number): Omit<DragState, 'startY' | 'moved'> | null {
+  private hit(x: number, y: number, slop = HIT_Y): Omit<DragState, 'startY' | 'moved'> | null {
     // the price-axis label counts too: it is the easiest thing to grab
     if (x > this.host.clientWidth || y > this.chart.panes()[0].getHeight()) return null
     let best: { key: LineKey; d: number } | null = null
@@ -169,7 +176,7 @@ class OrderLines {
       const d = Math.abs(ly - y)
       // SL/TP can sit on the entry: prefer them
       const bias = key.startsWith('entry:') ? 1.5 : 0
-      if (d <= HIT_Y && (!best || d + bias < best.d)) best = { key, d: d + bias }
+      if (d <= slop && (!best || d + bias < best.d)) best = { key, d: d + bias }
     }
     if (!best) return null
     const [kind, id] = best.key.split(':')
@@ -180,8 +187,16 @@ class OrderLines {
   private down(e: PointerEvent) {
     if (e.button !== 0 || !this.getAccount()) return
     const { x, y } = this.local(e)
-    const h = this.hit(x, y)
+    // a fingertip is far less precise than a mouse pointer
+    const touch = e.pointerType === 'touch'
+    const h = this.hit(x, y, touch ? HIT_TOUCH : HIT_Y)
+    this.tap = null
     if (!h) return
+    if (touch && x < this.chart.timeScale().width() - GRAB_TOUCH_PX) {
+      // leave the gesture to the chart so it can pan; remember the line in case this is just a tap
+      this.tap = { kind: h.kind, id: h.id, x: e.clientX, y: e.clientY, t: e.timeStamp, pointer: e.pointerId }
+      return
+    }
     e.stopPropagation()
     e.preventDefault()
     this.drag = { ...h, startY: y, moved: false }
@@ -192,7 +207,10 @@ class OrderLines {
   private move(e: PointerEvent) {
     const { x, y } = this.local(e)
     const d = this.drag
+    const tp = this.tap
+    if (tp && e.pointerId === tp.pointer && Math.hypot(e.clientX - tp.x, e.clientY - tp.y) > 10) this.tap = null
     if (!d) {
+      if (e.pointerType === 'touch') return
       const h = this.getAccount() ? this.hit(x, y) : null
       if (h) this.host.style.cursor = 'ns-resize'
       else if (this.host.style.cursor === 'ns-resize') this.host.style.cursor = ''
@@ -228,7 +246,28 @@ class OrderLines {
     }
   }
 
+  private cancel(e: PointerEvent) {
+    this.tap = null
+    const d = this.drag
+    if (!d) return
+    this.drag = null
+    if (this.host.hasPointerCapture(e.pointerId)) this.host.releasePointerCapture(e.pointerId)
+    this.chart.applyOptions({ handleScroll: true, handleScale: true })
+    const temp = this.lines.get(`new:${d.id}`)
+    if (temp) {
+      this.series.removePriceLine(temp)
+      this.lines.delete(`new:${d.id}`)
+    }
+    this.onModified() // puts a half-dragged line back where it was
+  }
+
   private up(e: PointerEvent) {
+    const tp = this.tap
+    this.tap = null
+    if (tp && e.pointerId === tp.pointer && e.timeStamp - tp.t < 450 && (tp.kind === 'entry' || tp.kind === 'order')) {
+      this.onClick(tp.kind, tp.id, e.clientX, e.clientY)
+      return
+    }
     const d = this.drag
     if (!d) return
     e.stopPropagation()
@@ -279,6 +318,10 @@ export interface TradeUIOptions {
   onChange: () => void
   /** trade journal (F5): button on finished trades */
   journal?: { has: (t: ClosedTrade) => boolean; open: (t: ClosedTrade) => void }
+  /** one-tap SELL / BUY and a limit/stop button drawn over the chart */
+  quick?: HTMLElement
+  /** wait for a tap on the chart; the price there and where the tap was (for the menu) */
+  pickPrice?: (label: string) => Promise<{ price: number; x: number; y: number } | null>
 }
 
 export class TradeUI {
@@ -298,12 +341,88 @@ export class TradeUI {
     this.build()
     this.lines.onClick = (kind, id, x, y) => this.lineMenu(kind, id, x, y)
     this.lines.getTicket = () => this.ticketPreview()
+    this.buildQuick()
     this.lines.setTicket = (field, v) => {
       const input = (this.el.ticket as HTMLFormElement).elements.namedItem(field) as HTMLInputElement
       input.value = px(v)
       this.updateRisk()
       this.lines.sync()
     }
+  }
+
+  // ---------- quick order over the chart ----------
+
+  /** Lots from the ticket, or the default when it holds nothing usable. */
+  private quickLots() {
+    const l = this.num('lots')
+    return l && Number.isFinite(l) && l > 0 ? l : 0.1
+  }
+
+  private buildQuick() {
+    const q = this.o.quick
+    if (!q) return
+    q.innerHTML = `
+      <button type="button" class="sell" data-q="sell"><small>SELL</small><span data-q-bid>–</span></button>
+      <span class="dq-spread" data-q-spread></span>
+      <button type="button" class="buy" data-q="buy"><small>BUY</small><span data-q-ask>–</span></button>
+      <button type="button" class="rq-pend" data-q="pending" title="Place a limit or stop order: tap the chart at its price">Limit / Stop</button>`
+    q.addEventListener('click', (e) => {
+      const act = (e.target as HTMLElement).closest<HTMLElement>('[data-q]')?.dataset.q
+      if (act === 'sell' || act === 'buy') this.quickMarket(act)
+      if (act === 'pending') void this.quickPending()
+    })
+  }
+
+  private quickMarket(side: Side) {
+    const acc = this.account
+    if (!acc) return
+    const lots = this.quickLots()
+    this.act(() => {
+      const p = acc.market(side, lots, null, null)
+      toast(`${side.toUpperCase()} ${lots.toFixed(2)} at ${fmtPx(p.entry)}. ${TOUCH ? 'Drag its price label on the right' : 'Drag its line'} to set SL/TP.`)
+    })
+  }
+
+  private async quickPending() {
+    if (!this.account || !this.o.pickPrice) return
+    const hit = await this.o.pickPrice('Tap the chart at the order price')
+    if (!hit) return
+    openMenu(hit.x, hit.y, this.pendingItems(hit.price))
+  }
+
+  /** Menu entries that place a limit or stop at `price` right away, with the ticket's lots. */
+  pendingItems(price: number): MenuItem[] {
+    const acc = this.account
+    const q = acc?.quote()
+    if (!acc || !q) return []
+    const p = Math.round(price * 100) / 100
+    const lots = this.quickLots()
+    // below the market a buy waits as a limit and a sell as a stop; above it is the other way round
+    const below = p < q.bid
+    const place = (side: Side, type: PendingType) => () =>
+      this.act(() => {
+        acc.pending(side, type, lots, p, null, null)
+        toast(`${side.toUpperCase()} ${type} ${lots.toFixed(2)} @ ${fmtPx(p)} placed. ${TOUCH ? 'Drag its price label on the right' : 'Drag its line'} to move it.`)
+      })
+    const lot = `${lots.toFixed(2)} lot`
+    return below
+      ? [
+          { label: `Buy limit at ${px(p)}`, hint: lot, act: place('buy', 'limit') },
+          { label: `Sell stop at ${px(p)}`, hint: lot, act: place('sell', 'stop') },
+        ]
+      : [
+          { label: `Sell limit at ${px(p)}`, hint: lot, act: place('sell', 'limit') },
+          { label: `Buy stop at ${px(p)}`, hint: lot, act: place('buy', 'stop') },
+        ]
+  }
+
+  private syncQuick() {
+    const q = this.o.quick
+    if (!q) return
+    const quote = this.account?.quote()
+    q.querySelector('[data-q-bid]')!.textContent = quote ? fmtPx(quote.bid) : '–'
+    q.querySelector('[data-q-ask]')!.textContent = quote ? fmtPx(quote.ask) : '–'
+    q.querySelector('[data-q-spread]')!.textContent = quote ? fmtPx(quote.ask - quote.bid) : ''
   }
 
   /** Ticket values shown as draggable preview lines (pending price only for limit/stop). */
@@ -335,7 +454,7 @@ export class TradeUI {
     const dir = (p.side === 'buy' ? 1 : -1) * (which === 'tp' ? 1 : -1)
     const v = Math.round((p.entry + dir * d) * 100) / 100
     this.act(() => acc.modifyPosition(id, which === 'sl' ? v : p.sl, which === 'tp' ? v : p.tp))
-    toast(`${which.toUpperCase()} set at ${fmtPx(v)}. Drag its line on the chart to adjust.`)
+    toast(`${which.toUpperCase()} set at ${fmtPx(v)}. ${TOUCH ? 'Drag its price label on the right' : 'Drag its line on the chart'} to adjust.`)
   }
 
   private addOrderLevel(id: number, which: 'sl' | 'tp') {
@@ -649,6 +768,7 @@ export class TradeUI {
     this.el.free.textContent = fmtMoney(acc.freeMargin())
     this.el.bid.textContent = q ? fmtPx(q.bid) : '–'
     this.el.ask.textContent = q ? fmtPx(q.ask) : '–'
+    this.syncQuick()
 
     const tabs = this.o.root.querySelectorAll<HTMLButtonElement>('[data-tab]')
     const labels = { pos: `Positions (${acc.positions.length})`, orders: `Orders (${acc.orders.length})`, hist: `History (${acc.history.length})` }
