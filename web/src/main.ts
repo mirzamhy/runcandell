@@ -81,6 +81,8 @@ function save(key: string, value: unknown) {
 // ---------- DOM ----------
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T
+/** phones and tablets: no right-click, no hover, no keyboard shortcuts */
+const TOUCH = matchMedia('(pointer: coarse)').matches
 const chartEl = $('chart')
 const chartWrap = chartEl.parentElement as HTMLElement
 const legendEl = $('legend')
@@ -280,6 +282,11 @@ indicators.onCollapse = (c) => save(KEY.chipsCollapsed, c)
 
 const trade = new TradeUI({
   root: tradeEl,
+  quick: $('replay-quick'),
+  pickPrice: async (label) => {
+    const p = await pickChartPrice(label)
+    return p === null ? null : { price: p, ...lastPickTap }
+  },
   chartHost: chartWrap,
   chart,
   candles,
@@ -427,6 +434,18 @@ let duelMarks: DuelMarker[] = []
 let savedDrawings: Drawing[] | null = null
 let savedTF: TF = tf
 let pickResolve: ((p: number | null) => void) | null = null
+/** where the last price-pick tap landed, to open a menu there */
+let lastPickTap = { x: 0, y: 0 }
+
+function pickChartPrice(label: string): Promise<number | null> {
+  return new Promise((res) => {
+    pickResolve?.(null)
+    pickResolve = res
+    pricePick.textContent = `${label} · ${TOUCH ? 'tap here to cancel' : 'Esc to cancel'}`
+    pricePick.hidden = false
+    chartWrap.classList.add('picking')
+  })
+}
 const duelLines = new Map<LineField, { line: ReturnType<typeof candles.createPriceLine>; spec: DuelLine }>()
 
 function setDuelLines(list: DuelLine[]) {
@@ -629,14 +648,7 @@ const duel = new DuelUI(duelPanelEl, duelQuickEl, {
     duelMarks = m
     syncDuelMarkers()
   },
-  pickPrice: (label) =>
-    new Promise((res) => {
-      pickResolve?.(null)
-      pickResolve = res
-      pricePick.textContent = `${label} · Esc to cancel`
-      pricePick.hidden = false
-      chartWrap.classList.add('picking')
-    }),
+  pickPrice: pickChartPrice,
 })
 
 function endPricePick(p: number | null) {
@@ -653,7 +665,13 @@ chartWrap.addEventListener(
   (e) => {
     if (!pickResolve || e.button !== 0) return
     const rect = chartEl.getBoundingClientRect()
+    if ((e.target as HTMLElement).closest('#price-pick')) {
+      e.stopPropagation()
+      endPricePick(null)
+      return
+    }
     const price = candles.coordinateToPrice(e.clientY - rect.top)
+    lastPickTap = { x: e.clientX, y: e.clientY }
     e.stopPropagation()
     e.preventDefault()
     endPricePick(price === null ? null : Math.round(price * 100) / 100)
@@ -961,9 +979,11 @@ replayHelp.hidden = true
 replayHelp.innerHTML = `
   <h3>How replay works</h3>
   <ol>
-    <li><b>Play</b> candles one by one with ▶ (<kbd>Space</kbd>) or <b>Step</b> (<kbd>Shift</kbd>+<kbd>→</kbd>). Set the speed next to it.</li>
-    <li><b>Open a position</b> with SELL / BUY in the order panel. For a limit/stop order, right-click the chart at the price you want.</li>
-    <li><b>SL and TP</b>: drag the position line up or down on the chart, or click the line and choose Set SL/TP. Every line can be dragged.</li>
+    ${TOUCH
+      ? '<li><b>Play</b> candles with ▶ or step one at a time with ⏭. Set the speed next to it.</li>'
+      : '<li><b>Play</b> candles one by one with ▶ (<kbd>Space</kbd>) or <b>Step</b> (<kbd>Shift</kbd>+<kbd>→</kbd>). Set the speed next to it.</li>'}
+    <li><b>Open a position</b> with SELL / BUY on the chart. For a limit/stop order tap <b>Limit / Stop</b> then the price, or ${TOUCH ? 'hold your finger on' : 'right-click'} the chart at that price.</li>
+    <li><b>SL and TP</b>: ${TOUCH ? 'drag the position line by its price label on the right edge (a swipe anywhere else moves the chart), or tap the line' : 'drag the position line up or down on the chart, or click the line'} and choose Set SL/TP. Every line can be dragged.</li>
     <li><b>Done</b>: Save to continue later, Exit replay to go back to the normal chart. History and stats are in the panel.</li>
   </ol>
   <button type="button" data-help="close">Got it</button>`
@@ -983,6 +1003,7 @@ function setReplayUI(on: boolean) {
   document.body.classList.toggle('replay', on)
   replayBar.hidden = !on
   tradeEl.hidden = !on
+  $('replay-quick').hidden = !on
   replayBtn.setAttribute('aria-pressed', String(on))
   for (const el of [gotoInput, gotoForm.querySelector('button')!, $('latest')]) (el as HTMLButtonElement).disabled = on
   const hide = replayBar.querySelector<HTMLInputElement>('[data-r="hide"]')!
@@ -1290,12 +1311,47 @@ function buildReplayControls() {
 
 /** Right click on the chart: drawing actions, a line at this price, orders at this price in replay. */
 function buildContextMenu() {
+  // touch: hold still on the chart to get the same menu (iOS never sends contextmenu)
+  let hold: { id: number; x: number; y: number; timer: number } | null = null
+  let heldAt = 0
+  const cancelHold = () => {
+    if (hold) clearTimeout(hold.timer)
+    hold = null
+  }
+  chartWrap.addEventListener('pointerdown', (e) => {
+    cancelHold()
+    if (e.pointerType !== 'touch' || picking || pickResolve) return
+    const { clientX: x, clientY: y } = e
+    hold = {
+      id: e.pointerId,
+      x,
+      y,
+      timer: window.setTimeout(() => {
+        hold = null
+        if (openChartMenu(x, y)) {
+          heldAt = Date.now()
+          navigator.vibrate?.(15)
+        }
+      }, 500),
+    }
+  })
+  chartWrap.addEventListener('pointermove', (e) => {
+    if (hold && e.pointerId === hold.id && Math.hypot(e.clientX - hold.x, e.clientY - hold.y) > 10) cancelHold()
+  })
+  for (const t of ['pointerup', 'pointercancel'] as const) chartWrap.addEventListener(t, cancelHold)
   chartWrap.addEventListener('contextmenu', (e) => {
+    // Android also sends contextmenu on a long press: the hold above already handled it
+    if (Date.now() - heldAt < 1500 || openChartMenu(e.clientX, e.clientY)) e.preventDefault()
+  })
+}
+
+/** The chart menu at a screen point; false when the point is off the price pane. */
+function openChartMenu(cx: number, cy: number): boolean {
+  {
     const rect = chartEl.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
-    if (x < 0 || y < 0 || x > rect.width || y > chart.panes()[0].getHeight()) return
-    e.preventDefault()
+    const x = cx - rect.left
+    const y = cy - rect.top
+    if (x < 0 || y < 0 || x > rect.width || y > chart.panes()[0].getHeight()) return false
     const price = candles.coordinateToPrice(y)
     const pt = drawings.pointAt(x, y)
     const hit = drawings.hitAt(x, y)
@@ -1316,17 +1372,9 @@ function buildContextMenu() {
       if (d.length) items.push(...d.map((x) => ({ label: x.label, hint: 'order', act: x.act })), 'sep')
     }
 
-    const acc = replay ? trade.account : null
-    const q = acc?.quote()
-    if (acc && q && price !== null) {
-      const p = Math.round(price * 100) / 100
-      // below the market a buy waits as a limit and a sell as a stop; above it is the other way round
-      const below = p < q.bid
-      items.push(
-        { label: `${below ? 'Buy limit' : 'Sell limit'} at ${px(p)}`, hint: 'fill ticket', act: () => trade.prefill('limit', p) },
-        { label: `${below ? 'Sell stop' : 'Buy stop'} at ${px(p)}`, hint: 'fill ticket', act: () => trade.prefill('stop', p) },
-        'sep',
-      )
+    if (replay && price !== null) {
+      const pend = trade.pendingItems(price)
+      if (pend.length) items.push(...pend, 'sep')
     }
 
     if (pt && price !== null) {
@@ -1362,8 +1410,9 @@ function buildContextMenu() {
     if (drawings.drawings.length) {
       items.push({ label: 'Delete all drawings', danger: true, act: () => void askClear().then((ok) => ok && drawings.clear()) })
     }
-    openMenu(e.clientX, e.clientY, items)
-  })
+    openMenu(cx, cy, items)
+    return true
+  }
 }
 
 function syncTFButtons() {
