@@ -484,7 +484,7 @@ function duelLocal(e: PointerEvent) {
   return { x: e.clientX - r.left, y: e.clientY - r.top, inPane: e.clientY - r.top <= chart.panes()[0].getHeight() && e.clientX - r.left <= r.width }
 }
 
-function duelHit(y: number): LineField | null {
+function duelHit(y: number, slop = 8): LineField | null {
   let best: { f: LineField; d: number } | null = null
   for (const [f, x] of duelLines) {
     if (!x.spec.drag) continue
@@ -492,7 +492,7 @@ function duelHit(y: number): LineField | null {
     if (ly === null) continue
     // SL/TP can sit on the entry: prefer them
     const d = Math.abs(ly - y) + (f === 'entry' ? 1.5 : 0)
-    if (Math.abs(ly - y) <= 8 && (!best || d < best.d)) best = { f, d }
+    if (Math.abs(ly - y) <= slop && (!best || d < best.d)) best = { f, d }
   }
   return best?.f ?? null
 }
@@ -503,8 +503,10 @@ chartWrap.addEventListener(
     if (!duelBars || !duel.play || duel.play.revealed || e.button !== 0 || pickResolve) return
     const { x, y, inPane } = duelLocal(e)
     if (!inPane) return
-    const f = duelHit(y)
-    if (!f) {
+    const touch = e.pointerType === 'touch'
+    const f = duelHit(y, touch ? 18 : 8)
+    // on touch a line is grabbed only by its price label: a swipe anywhere else pans the chart
+    if (!f || (touch && x < chart.timeScale().width() - 90)) {
       duelPress = { x, y }
       return
     }
@@ -523,6 +525,7 @@ chartWrap.addEventListener(
     const { y } = duelLocal(e)
     const d = duelDrag
     if (!d) {
+      if (e.pointerType === 'touch') return
       const f = duelHit(y)
       if (f) chartWrap.style.cursor = 'ns-resize'
       else if (chartWrap.style.cursor === 'ns-resize') chartWrap.style.cursor = ''
@@ -561,6 +564,15 @@ chartWrap.addEventListener(
   },
   true,
 )
+
+// the browser took the touch back mid-drag: drop it, the draft still holds the last good price
+chartWrap.addEventListener('pointercancel', (e) => {
+  duelPress = null
+  if (!duelDrag) return
+  duelDrag = null
+  if (chartWrap.hasPointerCapture(e.pointerId)) chartWrap.releasePointerCapture(e.pointerId)
+  chart.applyOptions({ handleScroll: true, handleScale: true })
+})
 
 /** A store over fixed bars (duel snapshot): no chunks, never loads. */
 function duelStore(t: TF): SeriesStore {
@@ -649,6 +661,7 @@ const duel = new DuelUI(duelPanelEl, duelQuickEl, {
     syncDuelMarkers()
   },
   pickPrice: pickChartPrice,
+  menuAtPick: (items) => openMenu(lastPickTap.x, lastPickTap.y, items.map((x) => ({ ...x, hint: 'order' }))),
 })
 
 function endPricePick(p: number | null) {

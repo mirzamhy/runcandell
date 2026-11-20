@@ -3070,7 +3070,7 @@ body.duel #bt-btn {
 }
 
 /* ---------- replay on phones: order from the chart, one-row control bar ---------- */
-.replay-quick .rq-pend {
+.duel-quick .rq-pend {
   white-space: nowrap;
   align-items: center;
   justify-content: center;

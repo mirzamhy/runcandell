@@ -22,6 +22,7 @@ const REASON: Record<string, string> = {
 const TYPE: Record<DuelOrderType, string> = { market: 'Market', limit: 'Limit', stop: 'Stop' }
 const COLOR = { buy: '#4c8dff', sell: '#ef5350', sl: '#ef5350', tp: '#26a69a' }
 const round2 = (x: number) => Math.round(x * 100) / 100
+const TOUCH = matchMedia('(pointer: coarse)').matches
 
 export interface DuelMarker {
   time: number
@@ -54,6 +55,8 @@ export interface DuelHost {
   setMarkers(m: DuelMarker[]): void
   /** resolve with the price of the next click on the chart (null if cancelled) */
   pickPrice(label: string): Promise<number | null>
+  /** a menu where the last price-pick tap landed */
+  menuAtPick(items: { label: string; act: () => void }[]): void
 }
 
 interface Draft {
@@ -308,7 +311,7 @@ export class DuelUI {
       <p class="dp-err" data-o="err" role="alert"></p>
       <button type="button" class="dp-send ${d.side ?? ''}" data-b="send" data-o="send">Choose BUY or SELL</button>
       <button type="button" class="dp-skip" data-b="skip">Skip round (0R)</button>
-      <p class="dp-help">Drag the order, SL and TP lines on the chart. Right-click the chart for a limit/stop order at that price. Minimum SL distance ${s.minStop.toFixed(2)}.</p>`
+      <p class="dp-help">${TOUCH ? 'Drag the order, SL and TP lines by their price label on the right edge. For a limit/stop order tap Limit / Stop, or hold your finger on the chart at that price.' : 'Drag the order, SL and TP lines on the chart. For a limit/stop order use Limit / Stop, or right-click the chart at that price.'} Minimum SL distance ${s.minStop.toFixed(2)}.</p>`
     this.sync()
   }
 
@@ -363,7 +366,8 @@ export class DuelUI {
     this.quick.innerHTML = `
       <button type="button" class="sell" data-b="sell" aria-pressed="${d.side === 'sell'}"><small>SELL</small>${this.bid().toFixed(2)}</button>
       <span class="dq-spread">${p.snap.cut.spread.toFixed(2)}</span>
-      <button type="button" class="buy" data-b="buy" aria-pressed="${d.side === 'buy'}"><small>BUY</small>${this.ask().toFixed(2)}</button>${hint}`
+      <button type="button" class="buy" data-b="buy" aria-pressed="${d.side === 'buy'}"><small>BUY</small>${this.ask().toFixed(2)}</button>
+      <button type="button" class="rq-pend" data-b="pend" title="Limit or stop order: ${TOUCH ? 'tap' : 'click'} the chart at its price">Limit / Stop</button>${hint}`
   }
 
   private drawLines() {
@@ -465,6 +469,11 @@ export class DuelUI {
       return
     }
     if (a === 'buy' || a === 'sell') this.setSide(a)
+    if (a === 'pend') {
+      const price = await this.host.pickPrice(`${TOUCH ? 'Tap' : 'Click'} the chart at the order price`)
+      if (price === null || this.play !== p || p.revealed) return
+      this.host.menuAtPick(this.menuAt(price))
+    }
     if (a === 'type') this.setType(v as DuelOrderType)
     if (a === 'rr' && p.draft.side && p.draft.sl !== null) {
       const e0 = this.entry()!
