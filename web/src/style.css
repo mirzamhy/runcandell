@@ -3133,3 +3133,10 @@ body.duel #bt-btn {
     pointer-events: none;
   }
 }
+
+/* no keyboard on touch screens: drop shortcut hints */
+@media (pointer: coarse) {
+  .bt-kbd {
+    display: none;
+  }
+}

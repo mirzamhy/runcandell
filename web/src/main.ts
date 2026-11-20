@@ -513,7 +513,11 @@ chartWrap.addEventListener(
     e.stopPropagation()
     e.preventDefault()
     duelDrag = { field: f, startY: y, moved: false, price: duelLines.get(f)!.line.options().price }
-    chartWrap.setPointerCapture(e.pointerId)
+    try {
+      chartWrap.setPointerCapture(e.pointerId)
+    } catch {
+      // the pointer already lifted (a very quick tap)
+    }
     chart.applyOptions({ handleScroll: false, handleScale: false })
   },
   true,

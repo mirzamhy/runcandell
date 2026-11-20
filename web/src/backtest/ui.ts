@@ -490,7 +490,7 @@ export class BacktestUI {
         <div class="st-go">
           <p class="st-err" data-err>${err ? esc(err) : ''}</p>
           <button type="button" class="primary st-run" data-act="run">${this.running ? '■ Cancel' : '▶ Run backtest'}</button>
-          <span class="bt-muted">or Ctrl+Enter</span>
+          <span class="bt-muted bt-kbd">or Ctrl+Enter</span>
         </div>
       </div>`
   }

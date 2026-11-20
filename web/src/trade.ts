@@ -200,7 +200,11 @@ class OrderLines {
     e.stopPropagation()
     e.preventDefault()
     this.drag = { ...h, startY: y, moved: false }
-    this.host.setPointerCapture(e.pointerId)
+    try {
+      this.host.setPointerCapture(e.pointerId)
+    } catch {
+      // the pointer already lifted (a very quick tap): the drag still works without capture
+    }
     this.chart.applyOptions({ handleScroll: false, handleScale: false })
   }
 
