@@ -9,7 +9,8 @@ import { EYES_SIGIL } from '../home/mask'
 import '../shared/theme.css'
 import '../shared/shell.css'
 import './duel.css'
-import { SYMBOL_LIST } from '../instruments'
+import { SYMBOL_LIST, instrument } from '../instruments'
+import { openReview } from './review'
 
 mountLogos()
 setFavicon()
@@ -88,7 +89,7 @@ function listCard(d: DuelListItem) {
   const status = d.status === 'done' ? 'Finished' : d.nextRound ? `Round ${d.nextRound}/${d.rounds}` : d.mode === 'async' && d.players.length < 2 ? 'Waiting for an opponent' : 'Waiting for your opponent'
   return `<a class="dp-card ${d.status === 'done' ? 'done' : ''}" href="${duelUrl(d.code)}">
     <span class="dp-card-vs"><b>${esc(mine?.nickname ?? '?')}</b><i>VS</i><b>${d.mode === 'solo' ? 'Practice' : esc(other?.nickname ?? '???')}</b></span>
-    <span class="dp-card-meta"><code>${d.code}</code> · ${d.rounds} rounds · ${status}</span>
+    <span class="dp-card-meta"><code>${d.code}</code> · ${d.rounds} rounds · ${status}${d.status === 'done' ? ` · ${formatWall(d.created_at, false)}` : ''}</span>
     <span class="dp-card-r ${tone(mine?.totalR)}">${fmtR(mine?.totalR)}</span>
   </a>`
 }
@@ -138,7 +139,7 @@ async function renderLobby() {
     <section class="dp-list">
       <h2>Active duels <small>${open.length}</small></h2>
       ${open.length ? `<div class="dp-cards">${open.map(listCard).join('')}</div>` : '<p class="dp-empty">None yet. Create a duel above.</p>'}
-      ${done.length ? `<h2>Finished <small>${done.length}</small></h2><div class="dp-cards">${done.map(listCard).join('')}</div>` : ''}
+      ${done.length ? `<h2>Match history <small>${done.length}</small></h2><p class="dp-note">Open a match to see every trade with its real prices, then open a trade to see it on the chart.</p><div class="dp-cards">${done.map(listCard).join('')}</div>` : ''}
     </section>`
 }
 
@@ -172,12 +173,23 @@ function fighter(p: DuelPlayer | undefined, side: 'a' | 'b', rounds: DuelRoundRe
 }
 
 function roundCard(r: DuelRoundResult, names: string[], done: boolean) {
+  const digits = r.symbol ? instrument(r.symbol).digits : 2
+  const px = (v: number | null | undefined) => (v === null || v === undefined ? '–' : v.toFixed(digits))
   const cell = (n: string) => {
     const x = r.results.find((y) => y.nickname === n)
     if (!x) return `<li class="wait"><span>${esc(n)}</span><b>${done ? '–' : '?'}</b></li>`
-    return `<li class="${tone(x.r)}"><span>${esc(n)}</span><em>${SIDE[x.side] ?? x.side} · ${REASON[x.reason] ?? x.reason}</em><b>${fmtR(x.r)}</b></li>`
+    const head = `${SIDE[x.side] ?? x.side}${x.type && x.type !== 'market' && x.side !== 'skip' ? ` ${x.type.toUpperCase()}` : ''} · ${REASON[x.reason] ?? x.reason}`
+    if (!done) return `<li class="${tone(x.r)}"><span>${esc(n)}</span><em>${head}</em><b>${fmtR(x.r)}</b></li>`
+    // finished: the real trade, and a tap opens it on the real chart
+    const prices =
+      x.side === 'skip'
+        ? ''
+        : `<em class="dp-px">${x.entry === null ? `order ${px(x.price)} · not filled` : `${px(x.entry)} → ${px(x.exit)}`}</em><em class="dp-px">SL ${px(x.sl)} · TP ${px(x.tp)}</em>`
+    return `<li class="${tone(x.r)}"><button type="button" class="dp-trade" data-a="review" data-round="${r.round}" data-who="${esc(n)}" title="See this trade on the real chart"><span>${esc(n)}</span><em>${head}</em>${prices}<b>${fmtR(x.r)}</b></button></li>`
   }
-  return `<article class="dp-round"><header>Round ${r.round}${done && r.symbol ? ` · ${r.symbol}` : ''}${done && r.realTime ? `<small>${formatWall(r.realTime)} UTC</small>` : ''}</header><ul>${names.map(cell).join('')}</ul></article>`
+  const when = done && r.realTime ? `<small>${formatWall(r.realTime)} UTC</small>` : ''
+  const open = done ? `<button type="button" class="dp-chart" data-a="review" data-round="${r.round}">Chart</button>` : ''
+  return `<article class="dp-round"><header><span>Round ${r.round}${done && r.symbol ? ` · ${r.symbol}` : ''}${when}</span>${open}</header><ul>${names.map(cell).join('')}</ul></article>`
 }
 
 async function renderDuel(code: string) {
@@ -231,7 +243,8 @@ async function renderDuel(code: string) {
     </section>
     ${share}
     <section class="dp-list">
-      <h2>Rounds</h2>
+      <h2>${done ? 'Trades' : 'Rounds'}</h2>
+      ${done ? '<p class="dp-note">Real prices and times. Tap a trade to see where it entered, where it left and where SL/TP sat.</p>' : ''}
       ${rounds.length ? `<div class="dp-rounds">${rounds.map((r) => roundCard(r, names, done)).join('')}</div>` : '<p class="dp-empty">No rounds played yet.</p>'}
       ${done ? '' : '<p class="dp-empty">Your opponent\'s results show once every player is done.</p>'}
     </section>`
@@ -273,6 +286,10 @@ app.addEventListener('click', async (e) => {
         () => toast('Link copied. Send it to your opponent.'),
         () => toast('Copy it from the link box by hand.', 'bad'),
       )
+    if (el.dataset.a === 'review') {
+      const code = new URLSearchParams(location.search).get('code')
+      if (code) openReview(code.toUpperCase(), Number(el.dataset.round), el.dataset.who)
+    }
     if (el.dataset.a === 'join') {
       await duelApi.join(el.dataset.code!)
       await renderDuel(el.dataset.code!)

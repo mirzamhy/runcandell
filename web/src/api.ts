@@ -165,7 +165,43 @@ export interface DuelRoundResult {
   k: number | null
   /** pair, after the duel is over */
   symbol?: string | null
-  results: { nickname: string; side: string; r: number; reason: string }[]
+  results: DuelTradeResult[]
+}
+
+/** One player's trade in a round; prices are real and only present once the duel is over. */
+export interface DuelTradeResult {
+  nickname: string
+  side: string
+  r: number
+  reason: string
+  type?: 'market' | 'limit' | 'stop'
+  price?: number | null
+  entry?: number | null
+  exit?: number | null
+  exitTime?: number | null
+  sl?: number | null
+  tp?: number | null
+}
+
+export type ReviewTF = 'M1' | 'M5' | 'M15' | 'H1'
+
+/** A finished round with real candles and every player's trade. */
+export interface DuelReview {
+  code: string
+  round: number
+  rounds: number
+  symbol: string
+  digits: number
+  tf: ReviewTF
+  cutTime: number
+  runMinutes: number
+  runEnd: number
+  bid: number
+  ask: number
+  from: number
+  to: number
+  bars: import('./types').Bar[]
+  trades: (Required<Omit<DuelTradeResult, 'type'>> & { type: 'market' | 'limit' | 'stop'; me: boolean; entryTime: number | null })[]
 }
 
 export interface DuelListItem {
@@ -222,6 +258,7 @@ export const duelApi = {
   start: (code: string, n: number) => call<Snapshot>('POST', `/duels/${encodeURIComponent(code)}/rounds/${n}/start`),
   decide: (code: string, n: number, d: { side: 'buy' | 'sell' | 'skip'; type?: 'market' | 'limit' | 'stop'; price?: number | null; sl?: number | null; tp?: number | null }) =>
     call<DecideResult>('POST', `/duels/${encodeURIComponent(code)}/rounds/${n}/decide`, d),
+  review: (code: string, n: number, tf: ReviewTF) => call<DuelReview>('GET', `/duels/${encodeURIComponent(code)}/rounds/${n}/review?tf=${tf}`),
 }
 
 export interface Stats {
