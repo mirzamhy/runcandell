@@ -969,7 +969,8 @@ function updateClock() {
   const clock = replayBar.querySelector<HTMLElement>('[data-r="clock"]')!
   if (!replay) return
   const wall = shift(replay.cursorTime)
-  clock.textContent = hideDate() ? formatWall(wall).slice(11) : formatWall(wall)
+  const s = formatWall(wall)
+  clock.innerHTML = hideDate() ? s.slice(11) : `<span class="yr">${s.slice(0, 5)}</span>${s.slice(5)}`
 }
 
 const HELP_KEY = 'rc.v1.replayHelpSeen'
@@ -1265,9 +1266,26 @@ function buildReplayControls() {
     if (act === 'exit') void exitReplay()
     if (act === 'save') void saveReplayToAccount()
     if (act === 'help') replayHelp.hidden = !replayHelp.hidden
+    if (act === 'more') {
+      const r = (e.target as HTMLElement).closest('[data-r]')!.getBoundingClientRect()
+      const hide = replayBar.querySelector<HTMLInputElement>('[data-r="hide"]')!
+      openMenu(r.right, r.top - 8, [
+        {
+          label: hide.checked ? 'Show dates' : 'Hide dates',
+          act: () => {
+            hide.checked = !hide.checked
+            hide.dispatchEvent(new Event('change'))
+          },
+        },
+        { label: 'Save session', act: () => void saveReplayToAccount() },
+        { label: 'How replay works', act: () => (replayHelp.hidden = false) },
+        'sep',
+        { label: 'Exit replay', danger: true, act: () => void exitReplay() },
+      ])
+    }
   })
   const speedSel = replayBar.querySelector<HTMLSelectElement>('[data-r="speed"]')!
-  for (const s of [1, 2, 5, 10, 20]) speedSel.add(new Option(`${s}×/sec`, String(s), false, s === speed))
+  for (const s of [1, 2, 5, 10, 20]) speedSel.add(new Option(`${s}×`, String(s), false, s === speed))
   speedSel.addEventListener('change', () => {
     speed = Number(speedSel.value)
     save(KEY.speed, speed)

@@ -3068,3 +3068,68 @@ body.duel #replay-btn,
 body.duel #bt-btn {
   display: none;
 }
+
+/* ---------- replay on phones: order from the chart, one-row control bar ---------- */
+.replay-quick .rq-pend {
+  white-space: nowrap;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  margin-left: 6px;
+  border-radius: 10px;
+  font-size: 12px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.replay-bar .rb-more {
+  display: none;
+}
+#price-pick {
+  cursor: pointer;
+}
+@media (max-width: 640px) {
+  .replay-bar {
+    gap: 3px;
+    padding: 0 4px;
+  }
+  .replay-bar button {
+    min-width: 32px;
+    padding: 0 4px;
+  }
+  .replay-bar select {
+    width: 54px;
+    padding-left: 6px;
+    padding-right: 2px;
+  }
+  .replay-bar .clock {
+    font-size: 12px;
+    padding: 0 2px;
+  }
+  .replay-bar .clock .yr,
+  .replay-bar [data-r='help'],
+  .replay-bar [data-r='save'],
+  .replay-bar .hide-date {
+    display: none;
+  }
+  .replay-bar .rb-more {
+    display: inline-flex;
+    justify-content: center;
+  }
+  .replay-quick button {
+    min-width: 70px;
+    padding: 4px 8px;
+    font-size: 13px;
+  }
+}
+@media (max-width: 640px) {
+  /* toasts above the chart, not over the replay controls */
+  .toasts {
+    top: 8px;
+    bottom: auto;
+    left: 8px;
+    right: 8px;
+    max-width: none;
+    pointer-events: none;
+  }
+}
